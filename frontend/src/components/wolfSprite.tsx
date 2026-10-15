@@ -85,3 +85,27 @@ export function useBlink(): boolean {
   }, []);
   return blink;
 }
+
+/** Mascota: el lobo completo, con moneda y salto. Reacciona al `mood`. */
+export function WolfMascot({ mood, scale = 1.4 }: { mood: string; scale?: number }) {
+  const blink = useBlink();
+  const [hop, setHop] = React.useState(false);
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setHop(true);
+      setTimeout(() => setHop(false), 420);
+    }, 4500 + Math.random() * 4000);
+    return () => clearInterval(id);
+  }, []);
+  const W = 16 * PX;
+  const H = WOLF.length * PX;
+  return (
+    <div className={`wolf-lead ${hop ? 'hop' : ''} mood-${mood}`}>
+      <div className="wolf-coin">🪙</div>
+      <svg width={Math.round(W * scale)} height={Math.round(H * scale)} viewBox={`0 0 ${W} ${H}`} className="wolf-svg-lead" shapeRendering="crispEdges">
+        <Sprite grid={WOLF} />
+        <Face mood={mood} eyeY={5} eyeX1={6} eyeX2={9} mouthY={7} mouthX={7} blink={blink} />
+      </svg>
+    </div>
+  );
+}

@@ -10,7 +10,6 @@ import RegimeGauge from '../components/RegimeGauge';
 import Positions from '../components/Positions';
 import Instructions from '../components/Instructions';
 import Usage from '../components/Usage';
-import TradingRoom from '../components/TradingRoom';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -51,7 +50,6 @@ export default function Dashboard() {
         <span className="floaty" style={{ fontSize: 26 }}>🪙</span>
       </div>
 
-      <TradingRoom />
       <AutoStatus />
       <Portfolio />
       <RegimeGauge />

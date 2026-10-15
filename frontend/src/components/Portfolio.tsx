@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Panel, Stat } from './Retro';
+import { WolfMascot } from './wolfSprite';
 
 function fmt(n: number) {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -129,13 +130,18 @@ export default function Portfolio() {
           <span className="live-dot" /> EN VIVO · PRECIOS AL MOMENTO
         </div>
         <div className={`pnl-hero ${gain ? 'gain' : 'loss'}`}>
-          <div className="pnl-label">{gain ? '▲ GANANCIA TOTAL' : '▼ PÉRDIDA TOTAL'}</div>
-          <div className="pnl-value">
-            {gain ? '+' : '−'}${fmt(Math.abs(aPnl))}
+          <div className="pnl-wolf">
+            <WolfMascot mood={gain ? 'profit' : 'loss'} scale={1.3} />
           </div>
-          <div className="pnl-pct">
-            {pnlPct >= 0 ? '+' : ''}
-            {pnlPct.toFixed(2)}%
+          <div className="pnl-info">
+            <div className="pnl-label">{gain ? '▲ GANANCIA TOTAL' : '▼ PÉRDIDA TOTAL'}</div>
+            <div className="pnl-value">
+              {gain ? '+' : '−'}${fmt(Math.abs(aPnl))}
+            </div>
+            <div className="pnl-pct">
+              {pnlPct >= 0 ? '+' : ''}
+              {pnlPct.toFixed(2)}%
+            </div>
           </div>
           {rain > 0 && <CoinRain n={rain} />}
         </div>
