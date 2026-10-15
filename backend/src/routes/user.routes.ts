@@ -159,6 +159,26 @@ export async function userRoutes(app: FastifyInstance) {
     });
   });
 
+  // Registrar un depósito/retiro manualmente (p. ej. backfill)
+  app.post('/deposits', { preHandler: [authenticate] }, async (req) => {
+    const body = z
+      .object({
+        amount: z.number().positive(),
+        kind: z.enum(['DEPOSIT', 'WITHDRAWAL']).optional(),
+        note: z.string().max(200).optional(),
+      })
+      .parse(req.body);
+    return prisma.deposit.create({
+      data: {
+        userId: req.user.sub,
+        currency: 'mxn',
+        amount: String(body.amount),
+        kind: body.kind ?? 'DEPOSIT',
+        note: body.note ?? 'registro manual',
+      },
+    });
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
