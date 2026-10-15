@@ -1,47 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Panel } from './Retro';
-
-// ===== Pixel-art 8-bit inspirado en "El Lobo de Wall Street" (fan-art) =====
-const PX = 6;
-
-const PALETTE: Record<string, string> = {
-  h: '#3a2410',
-  y: '#e8c14a',
-  z: '#2b2b33',
-  k: '#e8b48a',
-  s: '#1b2a4a',
-  g: '#6b7280',
-  l: '#cbb27a',
-  w: '#e9edf5',
-  t: '#c81e3a',
-  b: '#111318',
-  p: '#e0447f',
-};
-
-// Mascota principal: el lobo (más grande y detallado)
-const WOLF = [
-  '......hhhh......',
-  '....hhhhhhhh....',
-  '...hhhhhhhhhh...',
-  '...hhhhhhhhhh...',
-  '...hkkkkkkkkh...',
-  '...hkkkkkkkkh...',
-  '...hkkkkkkkkh...',
-  '....kkkkkkkk....',
-  '.....kkkkkk.....',
-  '......kkkk......',
-  '.....swwwws.....',
-  '....swwwwwws....',
-  '...sswwttwwss...',
-  '...sswwttwwss...',
-  '...sswwttwwss...',
-  '...sswwwwwwss...',
-  '...ssssssssss...',
-  '...ssss..ssss...',
-  '...ssss..ssss...',
-  '...ssss..ssss...',
-  '...bbbb..bbbb...',
-];
+import { WOLF, Sprite, Face, useBlink, PX } from './wolfSprite';
 
 interface CharCfg {
   key: string;
@@ -134,53 +93,6 @@ const CROWD: CharCfg[] = [
   },
 ];
 
-const Sprite = React.memo(function Sprite({ grid }: { grid: string[] }) {
-  const rects: React.ReactNode[] = [];
-  for (let y = 0; y < grid.length; y++) {
-    for (let x = 0; x < grid[y].length; x++) {
-      const c = grid[y][x];
-      if (c === '.') continue;
-      rects.push(<rect key={`${x}-${y}`} x={x * PX} y={y * PX} width={PX} height={PX} fill={PALETTE[c] ?? '#fff'} />);
-    }
-  }
-  return <>{rects}</>;
-});
-
-/** Expresión (ojos + boca) según el ánimo del mercado. */
-function Face({ mood, eyeY, eyeX1, eyeX2, mouthY, mouthX, blink }: any) {
-  const eye = mood === 'bear' ? '#c81e3a' : '#111318';
-  return (
-    <>
-      {!blink && (
-        <>
-          <rect x={eyeX1 * PX} y={eyeY * PX} width={PX} height={PX} fill={eye} />
-          <rect x={eyeX2 * PX} y={eyeY * PX} width={PX} height={PX} fill={eye} />
-        </>
-      )}
-      {mood === 'bull' ? (
-        <rect x={(mouthX - 1) * PX} y={mouthY * PX} width={PX * 3} height={PX} fill="#111318" />
-      ) : mood === 'bear' ? (
-        <rect x={(mouthX + 1) * PX} y={(mouthY + 1) * PX} width={PX} height={PX} fill="#111318" />
-      ) : (
-        <rect x={mouthX * PX} y={mouthY * PX} width={PX} height={PX} fill="#111318" />
-      )}
-    </>
-  );
-}
-
-function useBlink(): boolean {
-  const [blink, setBlink] = useState(false);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setBlink(true);
-      setTimeout(() => setBlink(false), 130);
-    }, 2800 + Math.random() * 2600);
-    return () => clearInterval(id);
-  }, []);
-  return blink;
-}
-
-/** Mascota principal: el lobo, más grande, con moneda y salto. */
 function WolfMascot({ mood }: { mood: string }) {
   const blink = useBlink();
   const [hop, setHop] = useState(false);
