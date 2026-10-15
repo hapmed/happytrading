@@ -102,4 +102,15 @@ export class BitsoClient {
     const data = await this.request<{ payload: any }>('DELETE', `/api/v3/orders/${oid}/`);
     return data.payload;
   }
+
+  // Depósitos (incluye transferencias SPEI/funding) y retiros — para no contarlos como ganancia
+  async deposits(limit = 50) {
+    const data = await this.request<{ payload: any[] }>('GET', `/api/v3/deposits/?limit=${limit}`);
+    return data.payload ?? [];
+  }
+
+  async withdrawals(limit = 50) {
+    const data = await this.request<{ payload: any[] }>('GET', `/api/v3/withdrawals/?limit=${limit}`);
+    return data.payload ?? [];
+  }
 }

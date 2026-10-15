@@ -150,6 +150,25 @@ export async function userRoutes(app: FastifyInstance) {
     });
   });
 
+  // Diagnóstico: depósitos/retiros crudos de Bitso
+  app.get('/deposits-raw', { preHandler: [authenticate] }, async (req, reply) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) return reply.code(400).send({ error: 'Bitso no conectado' });
+    const client = new BitsoClient({ apiKey: decrypt(user.bitsoApiKey), apiSecret: decrypt(user.bitsoApiSecret) });
+    const out: any = {};
+    try {
+      out.deposits = await client.deposits(20);
+    } catch (e: any) {
+      out.depositsError = e.message;
+    }
+    try {
+      out.withdrawals = await client.withdrawals(20);
+    } catch (e: any) {
+      out.withdrawalsError = e.message;
+    }
+    return out;
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
