@@ -24,6 +24,7 @@ export interface MarketContext {
   } | null;
   balances: Array<{ currency: string; available: string; total: string }>;
   recentSignals: Array<{ action: string; confidence: string }>;
+  position?: { currency: string; amount: number; avgCostMxn: number | null };
 }
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -158,11 +159,17 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
   const t = ctx.ticker;
   const mxn = ctx.balances.find((b) => b.currency === 'mxn');
   const recent = ctx.recentSignals.map((s) => s.action[0]).join(',') || '-';
+  const p = ctx.position;
+  const posLine = p
+    ? `tienes=${p.amount} ${p.currency}${p.avgCostMxn ? ` costo_promedio=${p.avgCostMxn}` : ''}`
+    : 'tienes=0';
   return [
     `Trader cripto. Par ${symbol}.`,
     `last=${t?.last ?? '-'} bid=${t?.bid ?? '-'} ask=${t?.ask ?? '-'} vol24h=${t?.volume ?? '-'}`,
     `MXN_disponible=${mxn?.available ?? '0'}`,
+    posLine,
     `señales_previas=${recent}`,
+    `Si tienes el activo y conviene vender (o tomar ganancia / cortar pérdida) responde SELL.`,
     `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=40 chars"}`,
   ].join(' ');
 }

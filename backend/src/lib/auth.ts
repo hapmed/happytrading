@@ -17,6 +17,8 @@ export function serializeUser(user: any) {
     stopLossPct: user.stopLossPct?.toString() ?? null,
     takeProfitPct: user.takeProfitPct?.toString() ?? null,
     initialCapital: user.initialCapital?.toString() ?? null,
+    riskPct: user.riskPct?.toString() ?? null,
+    cashReservePct: user.cashReservePct?.toString() ?? null,
     createdAt: user.createdAt,
   };
 }

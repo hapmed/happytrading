@@ -38,6 +38,8 @@ model User {
   stopLossPct    Decimal?   @db.Decimal(6, 3)
   takeProfitPct  Decimal?   @db.Decimal(6, 3)
   initialCapital Decimal?   @db.Decimal(18, 2)
+  riskPct        Decimal?   @db.Decimal(6, 3)
+  cashReservePct Decimal?   @db.Decimal(6, 3)
 
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
@@ -47,6 +49,7 @@ model User {
   notifications Notification[]
   snapshots     BalanceSnapshot[]
   portfolio     PortfolioSnapshot[]
+  positions     Position[]
 
   @@map("users")
 }
@@ -136,4 +139,17 @@ model PortfolioSnapshot {
 
   @@index([userId, capturedAt])
   @@map("portfolio_snapshots")
+}
+
+model Position {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol     String
+  baseAmount Decimal  @db.Decimal(18, 8)
+  avgCostMxn Decimal  @db.Decimal(18, 8)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, symbol])
+  @@map("positions")
 }

@@ -153,6 +153,30 @@ export default function Settings() {
               placeholder="ej. 10000  (para calcular tu ganancia)"
             />
           </Field>
+          <Field label="RIESGO POR OPERACIÓN (% del capital)">
+            <input
+              className="pixel-input"
+              type="number"
+              defaultValue={user?.riskPct ?? 1}
+              onBlur={(e) => {
+                const v = parseFloat(e.target.value);
+                if (v >= 0) updatePref({ riskPct: v });
+              }}
+              placeholder="ej. 1  (position-sizer)"
+            />
+          </Field>
+          <Field label="RESERVA DE EFECTIVO (%)">
+            <input
+              className="pixel-input"
+              type="number"
+              defaultValue={user?.cashReservePct ?? 30}
+              onBlur={(e) => {
+                const v = parseFloat(e.target.value);
+                if (v >= 0 && v <= 100) updatePref({ cashReservePct: v });
+              }}
+              placeholder="ej. 30  (no gastar todo el MXN)"
+            />
+          </Field>
         </div>
       </Panel>
     </div>

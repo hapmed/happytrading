@@ -21,6 +21,8 @@ const tradingSchema = z.object({
   stopLossPct: z.number().min(0).optional(),
   takeProfitPct: z.number().min(0).optional(),
   initialCapital: z.number().min(0).optional(),
+  riskPct: z.number().min(0).optional(),
+  cashReservePct: z.number().min(0).max(100).optional(),
 });
 
 export async function userRoutes(app: FastifyInstance) {
@@ -112,6 +114,28 @@ export async function userRoutes(app: FastifyInstance) {
   // Régimen de mercado cripto (adaptado de crypto-regime-analyzer)
   app.get('/regime', { preHandler: [authenticate] }, async () => {
     return getRegime();
+  });
+
+  // Mis posiciones con PnL no realizado (memoria de operaciones)
+  app.get('/positions', { preHandler: [authenticate] }, async (req) => {
+    const positions = await prisma.position.findMany({
+      where: { userId: req.user.sub },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const live = await getLiveValuation(req.user.sub).catch(() => null);
+    const priceMap = new Map<string, number>((live?.holdings ?? []).map((h: any) => [h.currency, h.priceMxn]));
+    return positions
+      .filter((p) => Number(p.baseAmount) > 0)
+      .map((p) => {
+        const base = p.symbol.split('_')[0];
+        const price = priceMap.get(base) ?? 0;
+        const qty = Number(p.baseAmount);
+        const avg = Number(p.avgCostMxn);
+        const valueMxn = qty * price;
+        const pnl = avg > 0 ? (price - avg) * qty : 0;
+        const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
+        return { symbol: p.symbol, baseAmount: qty, avgCostMxn: avg, priceMxn: price, valueMxn, pnl, pnlPct };
+      });
   });
 
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
