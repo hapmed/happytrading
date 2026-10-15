@@ -3,6 +3,7 @@ import { decrypt } from '../lib/crypto.js';
 import { BitsoClient } from './bitso.js';
 import { queueNotification } from '../lib/notify.js';
 import { logEvent } from '../lib/activity.js';
+import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
 
 function roundStr(n: number, dp: number): string {
   if (!isFinite(n) || n <= 0) return '0';
@@ -61,6 +62,8 @@ export async function runExecutorAll(): Promise<void> {
   }
   const anyClient = [...clients.values()][0];
 
+  const limits = await getBookLimits(anyClient).catch(() => new Map<string, BookLimits>());
+
   // Precios (una vez por símbolo) — SIN IA
   const priceMap = new Map<string, number>();
   for (const sym of symbols) {
@@ -87,7 +90,9 @@ export async function runExecutorAll(): Promise<void> {
     try {
       if (ins.side === 'BUY') {
         const minor = Number(ins.amountMxn ?? 0);
-        if (minor <= 1) {
+        const lim = limits.get(ins.symbol);
+        if (minor <= 1 || (lim && lim.minimumValue > 0 && minor < lim.minimumValue)) {
+          await logEvent(user.id, `Plan cancelado ${ins.symbol}: monto bajo el mínimo`, 'warn');
           await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'CANCELLED' } });
           continue;
         }
@@ -104,7 +109,10 @@ export async function runExecutorAll(): Promise<void> {
         await queueNotification(user.id, 'TRADE', `BUY ${ins.symbol} (plan IA)`, `${ins.reason ?? ''} @ ${price}`);
       } else {
         const qty = Number(ins.quantity ?? 0);
-        if (qty <= 0) {
+        const lim = limits.get(ins.symbol);
+        const belowMin = lim && (qty < lim.minimumAmount || qty * price < lim.minimumValue);
+        if (qty <= 0 || belowMin) {
+          await logEvent(user.id, `Plan cancelado ${ins.symbol}: cantidad bajo el mínimo`, 'warn');
           await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'CANCELLED' } });
           continue;
         }
@@ -149,6 +157,11 @@ export async function runExecutorAll(): Promise<void> {
 
     const client = clients.get(user.id)!;
     const qty = Number(pos.baseAmount);
+    const limP = limits.get(pos.symbol);
+    if (limP && (qty < limP.minimumAmount || qty * price < limP.minimumValue)) {
+      await logEvent(user.id, `SL/TP ${pos.symbol} no ejecutable: bajo el mínimo`, 'warn');
+      continue;
+    }
     try {
       const reason = hitSL ? `Stop-loss ${changePct.toFixed(1)}%` : `Take-profit +${changePct.toFixed(1)}%`;
       await logEvent(user.id, `⚙ Worker: SELL ${pos.symbol} · ${reason}`, 'warn');

@@ -6,6 +6,7 @@ import { setState, logEvent } from '../lib/activity.js';
 import { valuePortfolio } from '../lib/portfolio.js';
 import { getRegime } from './regime.js';
 import { fixedFractionalSize } from '../lib/sizing.js';
+import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
 
 // Pares y umbrales por perfil de estrategia.
 const SYMBOLS: Record<string, string[]> = {
@@ -78,6 +79,8 @@ export async function runBotForUser(userId: string): Promise<void> {
     apiKey: decrypt(user.bitsoApiKey),
     apiSecret: decrypt(user.bitsoApiSecret),
   });
+
+  const limits = await getBookLimits(client).catch(() => new Map<string, BookLimits>());
 
   await setState(userId, 'reading_balance', 'Leyendo saldo de Bitso');
   await logEvent(userId, 'IA planificando · leyendo saldo', 'info');
@@ -233,31 +236,45 @@ export async function runBotForUser(userId: string): Promise<void> {
         let size = stopLossPct > 0 ? fixedFractionalSize(equityMxn, riskPct, stopLossPct) : maxOrder;
         if (!isFinite(size) || size <= 0) size = maxOrder;
         const spend = Math.min(maxOrder, size, spendable);
-        if (spend <= 1) {
-          await logEvent(userId, `Sin efectivo disponible (reserva ${cashReservePct}%) · ${symbol}`, 'warn');
+        const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
+
+        // Respetar mínimos de Bitso (monto y valor por orden) antes de crear el plan
+        const lim = limits.get(symbol);
+        const minValue = lim?.minimumValue ?? 0;
+        const minAmount = lim?.minimumAmount ?? 0;
+        const minPerTranche = Math.max(minValue, minAmount * entry);
+        if (spend < Math.max(1, minPerTranche)) {
+          await logEvent(
+            userId,
+            `Monto $${spend.toFixed(2)} bajo el mínimo de ${symbol} ($${minPerTranche.toFixed(2)})`,
+            'warn',
+          );
           continue;
         }
-        const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
-        const per = spend / dcaLevels;
+        let levels = dcaLevels;
+        if (minPerTranche > 0) levels = Math.max(1, Math.min(dcaLevels, Math.floor(spend / minPerTranche)));
+        const per = spend / levels;
         const expires = new Date(Date.now() + PLAN_TTL_H * 3600 * 1000);
-        for (let i = 0; i < dcaLevels; i++) {
+        for (let i = 0; i < levels; i++) {
           const price = entry * (1 - (i * dcaStepPct) / 100);
           await prisma.instruction.create({
             data: {
               userId, symbol, side: 'BUY', trigger: 'price_below', triggerPrice: String(price),
-              amountMxn: String(per), reason: `${signal.reasoning} (DCA ${i + 1}/${dcaLevels})`, status: 'PENDING', expiresAt: expires,
+              amountMxn: String(per), reason: `${signal.reasoning} (DCA ${i + 1}/${levels})`, status: 'PENDING', expiresAt: expires,
             },
           });
         }
         await logEvent(
           userId,
-          `📋 Plan DCA: BUY ${symbol} ×${dcaLevels} desde ${entry.toFixed(2)} (−${dcaStepPct}% c/nivel · $${per.toFixed(0)} c/u)`,
+          `📋 Plan DCA: BUY ${symbol} ×${levels} desde ${entry.toFixed(2)} (−${dcaStepPct}% c/nivel · $${per.toFixed(0)} c/u)`,
           'ok',
         );
       } else {
         const qty = Math.min(posQty > 0 ? posQty : baseAvailable, baseAvailable);
-        if (qty <= 0) {
-          await logEvent(userId, `Sin saldo para vender · ${symbol}`, 'warn');
+        const limS = limits.get(symbol);
+        const belowMinS = limS && (qty < limS.minimumAmount || qty * last < limS.minimumValue);
+        if (qty <= 0 || belowMinS) {
+          await logEvent(userId, `Venta de ${symbol} no cumple el mínimo de Bitso · se omite`, 'warn');
           continue;
         }
         const target = signal.takeProfitPrice && signal.takeProfitPrice > 0 ? signal.takeProfitPrice : last;
