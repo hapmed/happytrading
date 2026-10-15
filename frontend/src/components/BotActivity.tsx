@@ -15,6 +15,7 @@ export default function BotActivity() {
   const [data, setData] = useState<any>(null);
   const [running, setRunning] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [frame, setFrame] = useState(0);
   const consoleRef = useRef<HTMLDivElement>(null);
 
   const load = () =>
@@ -36,6 +37,53 @@ export default function BotActivity() {
   const state: string = data?.state ?? 'idle';
   const aiWorking = state === 'ai_thinking';
   const botWorking = ['reading_balance', 'ai_thinking', 'placing_order'].includes(state);
+
+  useEffect(() => {
+    const speed = botWorking ? 130 : 600;
+    const id = setInterval(() => setFrame((f) => f + 1), speed);
+    return () => clearInterval(id);
+  }, [botWorking]);
+
+  const ROBOT_WORK = [
+`╭─────────╮
+│ ◉     ◉ │
+│   ╰▽▽▽╯ │
+╰──┬───┬──╯
+╭──┴───┴──╮
+│▓▒░▒░▒░▒▓│
+╰─────────╯`,
+`╭─────────╮
+│ ◉     ◉ │
+│   ╰▽▽▽╯ │
+╰──┬───┬──╯
+╭──┴───┴──╮
+│░▓▒░▒░▒▓░│
+╰─────────╯`,
+`╭─────────╮
+│  ◉   ◉  │
+│   ╰▽▽▽╯ │
+╰──┬───┬──╯
+╭──┴───┴──╮
+│▒░▓░▒░▓░▒│
+╰─────────╯`,
+  ];
+  const ROBOT_IDLE = [
+`╭─────────╮
+│ ◉     ◉ │
+│   ╰───╯ │
+╰──┬───┬──╯
+╭──┴───┴──╮
+│░░░░░░░░░│
+╰─────────╯`,
+`╭─────────╮
+│ ─     ─ │
+│   ╰───╯ │
+╰──┬───┬──╯
+╭──┴───┴──╮
+│░░░░░░░░░│
+╰─────────╯`,
+  ];
+  const robotArt = (botWorking ? ROBOT_WORK : ROBOT_IDLE)[frame % (botWorking ? 3 : 2)];
   const botAlive = !!data?.botAlive;
   const events: any[] = data?.events ?? [];
 
@@ -94,7 +142,7 @@ export default function BotActivity() {
       </div>
 
       <div className={`act-stage ${botWorking ? 'busy' : ''}`}>
-        <div className="robot">{botWorking ? '🤖' : aiWorking ? '🧠' : '🤖'}</div>
+        <pre className={`ascii-robot ${botWorking ? 'busy' : ''}`}>{robotArt}</pre>
         <div className="act-eq">
           {Array.from({ length: 11 }).map((_, i) => (
             <span key={i} style={{ animationDelay: `${i * 0.1}s` }} />

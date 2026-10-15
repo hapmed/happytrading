@@ -19,6 +19,8 @@ const smtpSchema = z.object({
 const settingsSchema = z.object({
   smtp: smtpSchema.nullable().optional(),
   gemini: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
+  openrouter: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
+  bot: z.object({ intervalMs: z.number().int().min(30000) }).nullable().optional(),
   registration_token: z.object({ value: z.string() }).nullable().optional(),
   turnstile: z.object({ siteKey: z.string(), secretKey: z.string() }).nullable().optional(),
 });
@@ -81,7 +83,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ----- Configuración global -----
   app.get('/settings', { preHandler: [requireAdmin] }, async () => {
-    const keys = ['smtp', 'gemini', 'registration_token', 'turnstile'];
+    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot'];
     const rows = await prisma.setting.findMany({ where: { key: { in: keys } } });
     const out: Record<string, unknown> = {};
     for (const r of rows) out[r.key] = r.value;
@@ -89,6 +91,7 @@ export async function adminRoutes(app: FastifyInstance) {
       obj && obj[field] ? { ...obj, [field]: MASK } : obj;
     if (out.smtp) out.smtp = mask(out.smtp, 'pass');
     if (out.gemini) out.gemini = mask(out.gemini, 'apiKey');
+    if (out.openrouter) out.openrouter = mask(out.openrouter, 'apiKey');
     if (out.turnstile) out.turnstile = mask(out.turnstile, 'secretKey');
     return out;
   });
@@ -97,7 +100,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const body = settingsSchema.parse(req.body);
 
     const existing = await prisma.setting.findMany({
-      where: { key: { in: ['smtp', 'gemini', 'registration_token', 'turnstile'] } },
+      where: { key: { in: ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot'] } },
     });
     const map = new Map(existing.map((r) => [r.key, r.value]));
 
@@ -128,6 +131,14 @@ export async function adminRoutes(app: FastifyInstance) {
       let gemini: any = body.gemini;
       if (gemini) gemini = preserveMasked(map.get('gemini'), gemini, 'apiKey');
       await upsert('gemini', gemini);
+    }
+    if (body.openrouter !== undefined) {
+      let or: any = body.openrouter;
+      if (or) or = preserveMasked(map.get('openrouter'), or, 'apiKey');
+      await upsert('openrouter', or);
+    }
+    if (body.bot !== undefined) {
+      await upsert('bot', body.bot);
     }
     if (body.registration_token !== undefined) {
       await upsert('registration_token', body.registration_token);

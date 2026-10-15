@@ -15,6 +15,8 @@ export const config = {
   // Valores por defecto (luego se sobrescriben desde el panel admin)
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
   geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite',
+  openrouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
+  openrouterModel: process.env.OPENROUTER_MODEL ?? 'google/gemma-4-31b-it:free',
   bitsoApiBase: process.env.BITSO_API_BASE ?? 'https://bitso.com',
   botIntervalMs: Number(process.env.BOT_INTERVAL_MS ?? 300000),
   registrationToken: process.env.REGISTRATION_TOKEN ?? '',

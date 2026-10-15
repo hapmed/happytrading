@@ -5,8 +5,6 @@ import { runBotForUser } from './services/bot.js';
 import { redis } from './lib/redis.js';
 import { heartbeat } from './lib/activity.js';
 
-const INTERVAL = config.botIntervalMs;
-
 async function tick(): Promise<void> {
   const users = await prisma.user.findMany({
     where: { bitsoApiKey: { not: null }, bitsoApiSecret: { not: null }, tradingEnabled: true },
@@ -24,6 +22,14 @@ async function tick(): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Intervalo configurable en caliente (settings.bot.intervalMs, mínimo 30 s). */
+async function getIntervalMs(): Promise<number> {
+  const s = await prisma.setting.findUnique({ where: { key: 'bot' } });
+  const v = (s?.value ?? {}) as any;
+  const iv = Number(v.intervalMs);
+  return iv && iv >= 30_000 ? iv : config.botIntervalMs;
 }
 
 /** Atiende peticiones de ejecución inmediata ("▶ EJECUTAR AHORA"). */
@@ -47,8 +53,26 @@ async function queueLoop(): Promise<void> {
   }
 }
 
+/** Bucle de programación: relee el intervalo en cada ciclo. */
+async function scheduleLoop(): Promise<void> {
+  console.log('[worker] Bucle de programación iniciado');
+  while (true) {
+    let interval = config.botIntervalMs;
+    try {
+      interval = await getIntervalMs();
+    } catch {}
+    await redis.set('bot:intervalMs', String(interval)).catch(() => {});
+    await sleep(interval);
+    try {
+      await tick();
+    } catch (err) {
+      console.error('[worker] error en pasada:', (err as Error).message);
+    }
+  }
+}
+
 async function start(): Promise<void> {
-  console.log(`[worker] HappyTrading worker arrancando. Intervalo: ${INTERVAL}ms`);
+  console.log(`[worker] HappyTrading worker arrancando. Intervalo base: ${config.botIntervalMs}ms`);
   for (let i = 0; i < 30; i++) {
     try {
       await tick();
@@ -59,9 +83,7 @@ async function start(): Promise<void> {
     }
   }
   queueLoop();
-  setInterval(() => {
-    tick().catch((err) => console.error('[worker] error en pasada:', (err as Error).message));
-  }, INTERVAL);
+  scheduleLoop();
 }
 
 start();

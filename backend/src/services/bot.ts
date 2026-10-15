@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { decrypt } from '../lib/crypto.js';
 import { BitsoClient } from './bitso.js';
-import { generateSignal } from './gemini.js';
+import { generateSignal } from './ai.js';
 import { queueNotification } from '../lib/notify.js';
 import { setState, logEvent } from '../lib/activity.js';
 import { valuePortfolio } from '../lib/portfolio.js';

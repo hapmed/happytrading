@@ -63,10 +63,11 @@ export interface Activity {
 }
 
 export async function getActivity(userId: string): Promise<Activity> {
-  const [stateRaw, hb, logs] = await Promise.all([
+  const [stateRaw, hb, logs, intervalRaw] = await Promise.all([
     redis.get(`bot:state:${userId}`),
     redis.get('bot:heartbeat'),
     redis.lrange(`bot:log:${userId}`, 0, LOG_MAX - 1),
+    redis.get('bot:intervalMs'),
   ]);
 
   const state = stateRaw
@@ -79,7 +80,7 @@ export async function getActivity(userId: string): Promise<Activity> {
     ...state,
     botAlive: ms != null && ms < 360_000,
     secondsSinceHeartbeat: ms != null ? Math.round(ms / 1000) : null,
-    intervalMs: config.botIntervalMs,
+    intervalMs: intervalRaw ? Number(intervalRaw) : config.botIntervalMs,
     lastPassAtMs: hb ? new Date(hb).getTime() : null,
     events: logs.map((l) => JSON.parse(l)),
   };

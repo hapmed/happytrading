@@ -95,6 +95,8 @@ export default function Admin() {
             from: f.smtp_from.value || undefined,
           },
           gemini: f.gemini_key.value || f.gemini_model.value ? { apiKey: f.gemini_key.value, model: f.gemini_model.value } : null,
+          openrouter: f.or_key.value || f.or_model.value ? { apiKey: f.or_key.value, model: f.or_model.value } : null,
+          bot: { intervalMs: Math.max(30, Number(f.bot_interval.value) || 300) * 1000 },
           registration_token: f.reg_token.value ? { value: f.reg_token.value } : null,
           turnstile: f.ts_site.value
             ? { siteKey: f.ts_site.value, secretKey: f.ts_secret.value }
@@ -249,6 +251,29 @@ export default function Admin() {
             <Field label="MODELO">
               <input className="pixel-input" name="gemini_model" defaultValue={settings.gemini?.model ?? 'gemini-3.1-flash-lite'} placeholder="gemini-3.1-flash-lite" />
             </Field>
+
+            <h3 style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: 'var(--cyan)' }} className="mb">
+              🧠 OPENROUTER (RESPALDO · MODELOS GRATIS)
+            </h3>
+            <Field label="API KEY">
+              <input className="pixel-input" name="or_key" type="password" defaultValue={settings.openrouter?.apiKey ?? ''} placeholder={settings.openrouter?.apiKey ? '••••••' : 'sk-or-v1-...'} />
+            </Field>
+            <Field label="MODELO">
+              <input className="pixel-input" name="or_model" defaultValue={settings.openrouter?.model ?? 'google/gemma-4-31b-it:free'} placeholder="google/gemma-4-31b-it:free" />
+            </Field>
+            <p className="muted mb" style={{ fontSize: 16 }}>
+              Se <b>intercala con Gemini</b> para repartir la carga (permite bajar el intervalo).
+            </p>
+
+            <h3 style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: 'var(--cyan)' }} className="mb">
+              ⏱ RITMO DEL BOT
+            </h3>
+            <Field label="INTERVALO ENTRE PASADAS (SEGUNDOS)">
+              <input className="pixel-input" name="bot_interval" type="number" defaultValue={Math.round((settings.bot?.intervalMs ?? 300000) / 1000)} />
+            </Field>
+            <p className="muted mb" style={{ fontSize: 16 }}>
+              Mínimo 30. Con Gemini + OpenRouter puedes bajar a 60–120 s.
+            </p>
 
             <h3 style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: 'var(--cyan)' }} className="mb">
               🛡 ANTI-BOTS

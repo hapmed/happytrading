@@ -685,6 +685,26 @@ a:hover {
   animation: bob 2.4s ease-in-out infinite;
   filter: drop-shadow(0 0 8px rgba(0, 255, 157, 0.45));
 }
+
+.ascii-robot {
+  font-family: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+  font-size: 15px;
+  line-height: 1.05;
+  color: var(--green);
+  text-shadow: 0 0 8px rgba(0, 255, 157, 0.5);
+  margin: 0;
+  white-space: pre;
+  text-align: center;
+}
+.ascii-robot.busy {
+  color: var(--yellow);
+  text-shadow: 0 0 14px rgba(255, 230, 0, 0.85);
+  animation: robotPulse 0.4s ease-in-out infinite;
+}
+@keyframes robotPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
 .act-stage.busy .robot {
   animation: bob 0.5s ease-in-out infinite, shake 0.3s linear infinite;
   filter: drop-shadow(0 0 16px rgba(255, 230, 0, 0.9));

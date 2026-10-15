@@ -25,6 +25,8 @@ export async function ensureDefaults(): Promise<void> {
   const defaults: Array<[string, unknown]> = [
     ['smtp', null],
     ['gemini', null],
+    ['openrouter', null],
+    ['bot', null],
     ['registration_token', null],
     ['turnstile', null],
   ];
