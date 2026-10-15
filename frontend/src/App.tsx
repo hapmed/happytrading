@@ -7,7 +7,6 @@ import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 import HowItWorks from './pages/HowItWorks';
-import WolfBuddy from './components/WolfBuddy';
 
 const TICKER = 'BTC/MXN ▲ · ETH/MXN ▼ · XRP/MXN ▲ · LTC/MXN ▲ · MANA/MXN ▼ · SOL/MXN ▲ · DAI/MXN ◆';
 
@@ -51,7 +50,6 @@ function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <div className="container">{children}</div>
-      <WolfBuddy />
     </div>
   );
 }
