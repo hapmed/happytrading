@@ -41,9 +41,11 @@ export async function runExecutorAll(): Promise<void> {
   });
   if (!users.length) return;
 
-  const clamp = { or: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
   const [instructions, positions] = await Promise.all([
-    prisma.instruction.findMany({ where: { status: 'PENDING', AND: [clamp] }, orderBy: { createdAt: 'asc' } }),
+    prisma.instruction.findMany({
+      where: { status: 'PENDING', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      orderBy: { createdAt: 'asc' },
+    }),
     prisma.position.findMany({ where: { baseAmount: { gt: 0 } } }),
   ]);
   if (!instructions.length && !positions.length) return;
