@@ -126,6 +126,8 @@ export async function runBotForUser(userId: string): Promise<void> {
 
   const profile = user.profile ?? 'balanced';
   const minConf = MIN_CONF[profile] ?? 0.6;
+  const dcaLevels = user.dcaLevels ? Math.max(1, Math.min(10, user.dcaLevels)) : 3;
+  const dcaStepPct = user.dcaStepPct ? Number(user.dcaStepPct) : 2;
   const heldCurrencies = balances
     .filter((b: any) => String(b.currency).toLowerCase() !== 'mxn' && Number(b.total ?? 0) > 0)
     .map((b: any) => String(b.currency).toLowerCase());
@@ -214,6 +216,13 @@ export async function runBotForUser(userId: string): Promise<void> {
 
       if (!user.autoTrade || signal.action === 'HOLD' || signal.confidence < minConf) continue;
 
+      // Si ya hay un plan activo para este par, se conserva (no re-crear la escalera).
+      const pendingCount = await prisma.instruction.count({ where: { userId, symbol, status: 'PENDING' } });
+      if (pendingCount > 0) {
+        await logEvent(userId, `Plan ${symbol} ya activo, se conserva`, 'info');
+        continue;
+      }
+
       if (signal.action === 'BUY') {
         if (regimeFilter && regime && regime.zone === 'RISK_OFF') {
           await logEvent(userId, `Compra bloqueada por régimen RISK_OFF · ${symbol}`, 'warn');
@@ -229,15 +238,22 @@ export async function runBotForUser(userId: string): Promise<void> {
           continue;
         }
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
-        await clearPending(userId, symbol);
-        await prisma.instruction.create({
-          data: {
-            userId, symbol, side: 'BUY', trigger: 'price_below', triggerPrice: String(entry),
-            amountMxn: String(spend), reason: signal.reasoning, status: 'PENDING',
-            expiresAt: new Date(Date.now() + PLAN_TTL_H * 3600 * 1000),
-          },
-        });
-        await logEvent(userId, `📋 Plan: BUY ${symbol} si precio ≤ ${entry.toFixed(2)} ($${spend.toFixed(0)} MXN)`, 'ok');
+        const per = spend / dcaLevels;
+        const expires = new Date(Date.now() + PLAN_TTL_H * 3600 * 1000);
+        for (let i = 0; i < dcaLevels; i++) {
+          const price = entry * (1 - (i * dcaStepPct) / 100);
+          await prisma.instruction.create({
+            data: {
+              userId, symbol, side: 'BUY', trigger: 'price_below', triggerPrice: String(price),
+              amountMxn: String(per), reason: `${signal.reasoning} (DCA ${i + 1}/${dcaLevels})`, status: 'PENDING', expiresAt: expires,
+            },
+          });
+        }
+        await logEvent(
+          userId,
+          `📋 Plan DCA: BUY ${symbol} ×${dcaLevels} desde ${entry.toFixed(2)} (−${dcaStepPct}% c/nivel · $${per.toFixed(0)} c/u)`,
+          'ok',
+        );
       } else {
         const qty = Math.min(posQty > 0 ? posQty : baseAvailable, baseAvailable);
         if (qty <= 0) {
@@ -246,7 +262,6 @@ export async function runBotForUser(userId: string): Promise<void> {
         }
         const target = signal.takeProfitPrice && signal.takeProfitPrice > 0 ? signal.takeProfitPrice : last;
         const trigger = target > last * 1.001 ? 'price_above' : 'immediate';
-        await clearPending(userId, symbol);
         await prisma.instruction.create({
           data: {
             userId, symbol, side: 'SELL', trigger, triggerPrice: String(trigger === 'price_above' ? target : last),

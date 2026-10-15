@@ -19,6 +19,8 @@ export interface User {
   cashReservePct: string | null;
   profile: string;
   symbols: string | null;
+  dcaLevels: number | null;
+  dcaStepPct: string | null;
 }
 
 interface AuthCtx {

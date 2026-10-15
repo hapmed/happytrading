@@ -42,6 +42,8 @@ model User {
   riskPct        Decimal?   @db.Decimal(6, 3)
   cashReservePct Decimal?   @db.Decimal(6, 3)
   symbols        String?
+  dcaLevels      Int?
+  dcaStepPct     Decimal?   @db.Decimal(6, 3)
 
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt

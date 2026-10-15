@@ -21,6 +21,8 @@ export function serializeUser(user: any) {
     riskPct: user.riskPct?.toString() ?? null,
     cashReservePct: user.cashReservePct?.toString() ?? null,
     symbols: user.symbols ?? null,
+    dcaLevels: user.dcaLevels ?? null,
+    dcaStepPct: user.dcaStepPct?.toString() ?? null,
     createdAt: user.createdAt,
   };
 }

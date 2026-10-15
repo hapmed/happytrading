@@ -208,6 +208,30 @@ export default function Settings() {
           <p className="muted mb" style={{ fontSize: 16 }}>
             <b>auto</b> = todos los pares contra MXN de Bitso · vacío = según el perfil. Cualquier cripto con par en MXN funciona.
           </p>
+          <Field label="ESCALERA DCA · Nº DE NIVELES">
+            <input
+              className="pixel-input"
+              type="number"
+              defaultValue={user?.dcaLevels ?? 3}
+              onBlur={(e) => {
+                const v = parseInt(e.target.value);
+                if (v >= 1 && v <= 10) updatePref({ dcaLevels: v });
+              }}
+              placeholder="ej. 3  (compra por tramos)"
+            />
+          </Field>
+          <Field label="ESCALERA DCA · SEPARACIÓN ENTRE NIVELES (%)">
+            <input
+              className="pixel-input"
+              type="number"
+              defaultValue={user?.dcaStepPct ?? 2}
+              onBlur={(e) => {
+                const v = parseFloat(e.target.value);
+                if (v >= 0 && v <= 50) updatePref({ dcaStepPct: v });
+              }}
+              placeholder="ej. 2  (cada nivel −2% del precio)"
+            />
+          </Field>
         </div>
       </Panel>
     </div>
