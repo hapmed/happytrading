@@ -23,8 +23,8 @@ const settingsSchema = z.object({
   bot: z.object({ intervalMs: z.number().int().min(30000).optional(), regimeFilter: z.boolean().optional() }).nullable().optional(),
   limits: z
     .object({
-      gemini: z.object({ requestsPerDay: z.number().int().min(0), tokensPerDay: z.number().int().min(0) }),
-      openrouter: z.object({ requestsPerDay: z.number().int().min(0), tokensPerDay: z.number().int().min(0) }),
+      gemini: z.object({ requestsPerDay: z.number().int().min(0), tokensPerDay: z.number().int().min(0), requestsPerMinute: z.number().int().min(0).optional() }),
+      openrouter: z.object({ requestsPerDay: z.number().int().min(0), tokensPerDay: z.number().int().min(0), requestsPerMinute: z.number().int().min(0).optional() }),
     })
     .nullable()
     .optional(),

@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { kv } from '../lib/kv.js';
 import { config } from '../config.js';
-import { recordUsage, isProviderAllowed } from '../lib/usage.js';
+import { recordUsage, isProviderAllowed, markCall, setCooldown } from '../lib/usage.js';
 
 export interface MarketSignal {
   symbol: string;
@@ -81,6 +81,7 @@ async function callGemini(model: string, apiKey: string, prompt: string): Promis
   };
   const start = Date.now();
   try {
+    markCall('gemini');
     const res = await fetchWithTimeout(`${GEMINI_BASE}/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -100,6 +101,7 @@ async function callGemini(model: string, apiKey: string, prompt: string): Promis
     }
     recordUsage('gemini', 0, false);
     const status = res.status;
+    if (status === 429) setCooldown('gemini', 90_000);
     const retryable = status === 429 || status === 500 || status === 503 || status === 404;
     return { ok: false, retryable, error: `Gemini ${status}: ${data?.error?.message ?? 'error'}` };
   } catch (err) {
@@ -118,6 +120,7 @@ async function callOpenRouter(model: string, apiKey: string, prompt: string): Pr
   };
   const start = Date.now();
   try {
+    markCall('openrouter');
     const res = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -137,6 +140,7 @@ async function callOpenRouter(model: string, apiKey: string, prompt: string): Pr
       return { ok: true, text: content, tokens, latencyMs };
     }
     recordUsage('openrouter', 0, false);
+    if (res.status === 429) setCooldown('openrouter', 90_000);
     return { ok: false, retryable: true, error: `OpenRouter ${res.status}: ${data?.error?.message ?? 'sin contenido'}` };
   } catch (err) {
     recordUsage('openrouter', 0, false);
