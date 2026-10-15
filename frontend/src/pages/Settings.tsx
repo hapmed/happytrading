@@ -178,8 +178,7 @@ export default function Settings() {
             />
           </Field>
           <div className="field">
-            <span className="field-label">PERFIL DE ESTRATEGIA</span>
-            <div className="row" style={{ marginBottom: 8 }}>
+            <span className="field-label">PERFIL DE ESTRATEGIA</span>            <div className="row" style={{ marginBottom: 8 }}>
               <PixelButton variant={user?.profile === 'conservative' ? 'primary' : ''} onClick={() => updatePref({ profile: 'conservative' })}>
                 CONSERVADOR
               </PixelButton>

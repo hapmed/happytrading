@@ -20,6 +20,7 @@ export function serializeUser(user: any) {
     initialCapital: user.initialCapital?.toString() ?? null,
     riskPct: user.riskPct?.toString() ?? null,
     cashReservePct: user.cashReservePct?.toString() ?? null,
+    symbols: user.symbols ?? null,
     createdAt: user.createdAt,
   };
 }

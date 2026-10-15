@@ -26,6 +26,28 @@ async function clearPending(userId: string, symbol: string): Promise<void> {
 }
 
 /**
+ * Lista de pares a operar:
+ *  - "auto"        → todos los pares contra MXN que ofrece Bitso
+ *  - "a,b,c"       → lista personalizada
+ *  - vacío         → según el perfil
+ */
+async function resolveSymbols(custom: string | null, profile: string, client: BitsoClient): Promise<string[]> {
+  const c = (custom ?? '').trim().toLowerCase();
+  if (c === 'auto') {
+    try {
+      const books = await client.availableBooks();
+      const mxn = books.map((b: any) => String(b.book ?? '')).filter((bk: string) => bk.endsWith('_mxn'));
+      if (mxn.length) return mxn;
+    } catch {}
+    return SYMBOLS[profile] ?? SYMBOLS.balanced;
+  }
+  if (c) {
+    return c.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return SYMBOLS[profile] ?? SYMBOLS.balanced;
+}
+
+/**
  * PLANIFICADOR (usa IA): analiza y deja INSTRUCCIONES con niveles y tiempo.
  * No coloca órdenes — de eso se encarga el ejecutor "tonto".
  */
@@ -84,8 +106,8 @@ export async function runBotForUser(userId: string): Promise<void> {
   const stopLossPct = user.stopLossPct ? Number(user.stopLossPct) : 0;
 
   const profile = user.profile ?? 'balanced';
-  const symbols = SYMBOLS[profile] ?? SYMBOLS.balanced;
   const minConf = MIN_CONF[profile] ?? 0.6;
+  const symbols = await resolveSymbols(user.symbols, profile, client);
 
   const botSetting = await prisma.setting.findUnique({ where: { key: 'bot' } });
   const regimeFilter = (botSetting?.value as any)?.regimeFilter !== false;
