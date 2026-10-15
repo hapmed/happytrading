@@ -15,19 +15,22 @@ export default function Dashboard() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([api('/me/trades'), api('/me/signals')])
-      .then(([t, s]) => {
-        setTrades(t);
-        setSignals(s);
-      })
-      .catch((e) => setError(e.message));
-  }, []);
-
-  useEffect(() => {
-    if (!user?.hasBitso) return;
-    api('/me/balance')
-      .then((d) => setBalances(d.balances ?? []))
-      .catch(() => {});
+    const load = () => {
+      Promise.all([api('/me/trades'), api('/me/signals')])
+        .then(([t, s]) => {
+          setTrades(t);
+          setSignals(s);
+        })
+        .catch((e) => setError(e.message));
+      if (user?.hasBitso) {
+        api('/me/balance')
+          .then((d) => setBalances(d.balances ?? []))
+          .catch(() => {});
+      }
+    };
+    load();
+    const id = setInterval(load, 6000);
+    return () => clearInterval(id);
   }, [user?.hasBitso]);
 
   const buys = trades.filter((t) => t.side === 'BUY').length;

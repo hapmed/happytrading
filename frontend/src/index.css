@@ -904,6 +904,25 @@ a:hover {
   from { transform: scaleX(0); }
 }
 
+/* ---------- EN VIVO ---------- */
+.live-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--green);
+  margin-bottom: 12px;
+}
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+  animation: blink 1s steps(2) infinite;
+}
+
 @media (max-width: 600px) {
   .auto-banner { padding: 12px; gap: 10px; }
   .auto-title { font-size: 11px; }

@@ -92,7 +92,7 @@ export default function Portfolio() {
   const load = () => api('/me/portfolio').then(setData).catch(() => {});
   useEffect(() => {
     load();
-    const id = setInterval(load, 8000);
+    const id = setInterval(load, 6000);
     return () => clearInterval(id);
   }, []);
 
@@ -125,6 +125,9 @@ export default function Portfolio() {
   return (
     <>
       <Panel title="◈ TU DINERO" className={`pnl-panel ${flash}`}>
+        <div className="live-row">
+          <span className="live-dot" /> EN VIVO · PRECIOS AL MOMENTO
+        </div>
         <div className={`pnl-hero ${gain ? 'gain' : 'loss'}`}>
           <div className="pnl-label">{gain ? '▲ GANANCIA TOTAL' : '▼ PÉRDIDA TOTAL'}</div>
           <div className="pnl-value">

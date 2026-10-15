@@ -6,6 +6,7 @@ import { encrypt, decrypt } from '../lib/crypto.js';
 import { BitsoClient } from '../services/bitso.js';
 import { getActivity } from '../lib/activity.js';
 import { redis } from '../lib/redis.js';
+import { getLiveValuation } from '../lib/portfolio.js';
 
 const bitsoSchema = z.object({
   apiKey: z.string().min(1),
@@ -107,26 +108,33 @@ export async function userRoutes(app: FastifyInstance) {
     return getActivity(req.user.sub);
   });
 
-  // Portafolio: inversión inicial vs valor actual, ganancia/pérdida e histórico
+  // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
     const invested = user?.initialCapital ? Number(user.initialCapital) : 0;
 
-    const [latestRows, historyRows] = await Promise.all([
-      prisma.portfolioSnapshot.findMany({
-        where: { userId: req.user.sub },
-        orderBy: { capturedAt: 'desc' },
-        take: 1,
-      }),
-      prisma.portfolioSnapshot.findMany({
-        where: { userId: req.user.sub },
-        orderBy: { capturedAt: 'asc' },
-        take: 300,
-      }),
-    ]);
+    let live: any = null;
+    try {
+      live = await getLiveValuation(req.user.sub);
+    } catch {
+      live = null;
+    }
 
-    const latest = latestRows[0];
-    const currentValue = latest ? Number(latest.totalMxn) : 0;
+    const historyRows = await prisma.portfolioSnapshot.findMany({
+      where: { userId: req.user.sub },
+      orderBy: { capturedAt: 'asc' },
+      take: 300,
+    });
+
+    const history: Array<{ t: string | Date; v: number }> = historyRows.map((h) => ({
+      t: h.capturedAt,
+      v: Number(h.totalMxn),
+    }));
+    if (live) history.push({ t: live.updatedAt, v: live.currentValue });
+
+    const last = historyRows[historyRows.length - 1];
+    const currentValue = live ? live.currentValue : last ? Number(last.totalMxn) : 0;
+    const holdings = live ? live.holdings : ((last?.holdings as any) ?? []);
     const pnl = invested > 0 ? currentValue - invested : 0;
     const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
 
@@ -135,9 +143,10 @@ export async function userRoutes(app: FastifyInstance) {
       currentValue,
       pnl,
       pnlPct,
-      holdings: (latest?.holdings as any) ?? [],
-      updatedAt: latest?.capturedAt ?? null,
-      history: historyRows.map((h) => ({ t: h.capturedAt, v: Number(h.totalMxn) })),
+      holdings,
+      live: !!live,
+      updatedAt: live?.updatedAt ?? last?.capturedAt ?? null,
+      history,
     };
   });
 

@@ -1,3 +1,6 @@
+import { prisma } from './prisma.js';
+import { redis } from './redis.js';
+import { decrypt } from './crypto.js';
 import { BitsoClient } from '../services/bitso.js';
 
 export interface Holding {
@@ -50,4 +53,38 @@ export async function valuePortfolio(client: BitsoClient, balances: any[]): Prom
 
   holdings.sort((a, b) => b.valueMxn - a.valueMxn);
   return { totalMxn: Math.round(totalMxn * 100) / 100, holdings };
+}
+
+export interface LiveValuation {
+  currentValue: number;
+  holdings: Holding[];
+  updatedAt: string;
+}
+
+// Caché corta para no golpear la API de Bitso en cada refresco de pantalla.
+const LIVE_TTL = 25;
+
+/** Revalora el portafolio en vivo (precios actuales), con caché en Redis. */
+export async function getLiveValuation(userId: string): Promise<LiveValuation | null> {
+  const cacheKey = `live:${userId}`;
+  const cached = await redis.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.bitsoApiKey || !user?.bitsoApiSecret) return null;
+
+  const client = new BitsoClient({
+    apiKey: decrypt(user.bitsoApiKey),
+    apiSecret: decrypt(user.bitsoApiSecret),
+  });
+
+  const balances = await client.balance();
+  const val = await valuePortfolio(client, balances);
+  const result: LiveValuation = {
+    currentValue: val.totalMxn,
+    holdings: val.holdings,
+    updatedAt: new Date().toISOString(),
+  };
+  await redis.set(cacheKey, JSON.stringify(result), 'EX', LIVE_TTL);
+  return result;
 }
