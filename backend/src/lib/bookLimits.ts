@@ -1,6 +1,6 @@
 // Límites por libro de Bitso (min/max) según /v3/available_books/
 // Cacheado en Redis para no consultarlo en cada operación.
-import { redis } from './redis.js';
+import { kv } from './kv.js';
 import { BitsoClient } from '../services/bitso.js';
 
 const KEY = 'bitso:booklimits';
@@ -17,7 +17,7 @@ export interface BookLimits {
 
 export async function getBookLimits(client: BitsoClient): Promise<Map<string, BookLimits>> {
   try {
-    const cached = await redis.get(KEY);
+    const cached = await kv.get(KEY);
     if (cached) {
       const arr: BookLimits[] = JSON.parse(cached);
       return new Map(arr.map((b) => [b.book, b]));
@@ -35,7 +35,7 @@ export async function getBookLimits(client: BitsoClient): Promise<Map<string, Bo
   }));
 
   try {
-    await redis.set(KEY, JSON.stringify(list), 'EX', TTL);
+    await kv.set(KEY, JSON.stringify(list), TTL);
   } catch {}
 
   return new Map(list.map((b) => [b.book, b]));

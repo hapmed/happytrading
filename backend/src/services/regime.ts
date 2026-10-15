@@ -1,7 +1,7 @@
 // Régimen de mercado cripto — adaptado de "crypto-regime-analyzer"
 // (tradermonty/claude-trading-skills, MIT). Datos gratis sin API key:
 // CoinGecko (tendencias/BTC/global) + Binance (funding de perpetuos).
-import { redis } from '../lib/redis.js';
+import { kv } from '../lib/kv.js';
 
 export type RegimeZone = 'RISK_ON' | 'NEUTRAL' | 'RISK_OFF';
 
@@ -73,9 +73,9 @@ async function dominanceDirection(current: number): Promise<number | null> {
   const today = new Date().toISOString().slice(0, 10);
   let hist: Record<string, string> = {};
   try {
-    hist = await redis.hgetall('regime:dom');
-    await redis.hset('regime:dom', today, String(current));
-    await redis.expire('regime:dom', 60 * 60 * 24 * 45);
+    hist = await kv.hgetall('regime:dom');
+    await kv.hset('regime:dom', today, String(current));
+    await kv.expire();
   } catch {}
   const dates = Object.keys(hist).sort();
   if (dates.length < 1) return null;
@@ -258,18 +258,18 @@ export async function computeRegime(): Promise<RegimeResult> {
 export async function getRegime(force = false): Promise<RegimeResult> {
   if (!force) {
     try {
-      const cachedRaw = await redis.get(CACHE_KEY);
+      const cachedRaw = await kv.get(CACHE_KEY);
       if (cachedRaw) return { ...JSON.parse(cachedRaw), cached: true };
     } catch {}
   }
   try {
     const result = await computeRegime();
     try {
-      await redis.set(CACHE_KEY, JSON.stringify(result), 'EX', CACHE_TTL);
+      await kv.set(CACHE_KEY, JSON.stringify(result), CACHE_TTL);
     } catch {}
     return result;
   } catch (err) {
-    const cachedRaw = await redis.get(CACHE_KEY).catch(() => null);
+    const cachedRaw = await kv.get(CACHE_KEY).catch(() => null);
     if (cachedRaw) return { ...JSON.parse(cachedRaw), cached: true };
     throw err;
   }

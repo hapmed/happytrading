@@ -1,5 +1,5 @@
 import { prisma } from './prisma.js';
-import { redis } from './redis.js';
+import { kv } from './kv.js';
 import { decrypt } from './crypto.js';
 import { BitsoClient } from '../services/bitso.js';
 
@@ -67,7 +67,7 @@ const LIVE_TTL = 25;
 /** Revalora el portafolio en vivo (precios actuales), con caché en Redis. */
 export async function getLiveValuation(userId: string): Promise<LiveValuation | null> {
   const cacheKey = `live:${userId}`;
-  const cached = await redis.get(cacheKey);
+  const cached = await kv.get(cacheKey);
   if (cached) return JSON.parse(cached);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -85,6 +85,6 @@ export async function getLiveValuation(userId: string): Promise<LiveValuation | 
     holdings: val.holdings,
     updatedAt: new Date().toISOString(),
   };
-  await redis.set(cacheKey, JSON.stringify(result), 'EX', LIVE_TTL);
+  await kv.set(cacheKey, JSON.stringify(result), LIVE_TTL);
   return result;
 }

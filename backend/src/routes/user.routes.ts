@@ -5,7 +5,7 @@ import { authenticate, serializeUser } from '../lib/auth.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
 import { BitsoClient } from '../services/bitso.js';
 import { getActivity } from '../lib/activity.js';
-import { redis } from '../lib/redis.js';
+import { kv } from '../lib/kv.js';
 import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
 
@@ -194,7 +194,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   // Lanza una pasada inmediata del bot para este usuario
   app.post('/run', { preHandler: [authenticate] }, async (req) => {
-    await redis.lpush('bot:queue', req.user.sub);
+    await kv.lpush('bot:queue', req.user.sub);
     return { queued: true };
   });
 }

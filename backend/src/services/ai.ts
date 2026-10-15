@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js';
-import { redis } from '../lib/redis.js';
+import { kv } from '../lib/kv.js';
 import { config } from '../config.js';
 
 export interface MarketSignal {
@@ -255,7 +255,7 @@ export async function generateSignal(symbol: string, ctx: MarketContext): Promis
     const interleaved = interleave(attempts);
     let offset = 0;
     try {
-      const n = await redis.incr('ai:rotation');
+      const n = await kv.incr('ai:rotation');
       offset = n % interleaved.length;
     } catch {}
     const ordered = [...interleaved.slice(offset), ...interleaved.slice(0, offset)];

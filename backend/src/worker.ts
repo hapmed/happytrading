@@ -1,16 +1,13 @@
-// HappyTrading Worker — ejecuta el bot en background con AUTO-RECUPERACIÓN.
+// Bucles del bot (planificador + ejecutor + vigilante) — corren DENTRO del proceso de la API.
 import { writeFileSync } from 'node:fs';
 import { config } from './config.js';
 import { prisma } from './lib/prisma.js';
 import { runBotForUser } from './services/bot.js';
 import { runExecutorAll } from './services/executor.js';
-import { redis } from './lib/redis.js';
+import { kv } from './lib/kv.js';
 import { heartbeat } from './lib/activity.js';
 
-// Conexión DEDICADA para el BRPOP bloqueante (si no, bloquea el resto de comandos).
-const queueRedis = redis.duplicate();
-
-const PASS_TIMEOUT = 180_000; // ninguna pasada puede colgarse más de 3 min
+const PASS_TIMEOUT = 180_000;
 const HEARTBEAT_FILE = '/tmp/worker-heartbeat';
 
 let running = false;
@@ -26,7 +23,6 @@ function touchHeartbeatFile(): void {
   } catch {}
 }
 
-/** Intervalo configurable en caliente (settings.bot.intervalMs, mínimo 30 s). */
 async function getIntervalMs(): Promise<number> {
   const s = await prisma.setting.findUnique({ where: { key: 'bot' } });
   const v = (s?.value ?? {}) as any;
@@ -50,7 +46,6 @@ async function tick(): Promise<void> {
   }
 }
 
-/** Pasada protegida: evita solapamientos y acota el tiempo. */
 async function safeTick(reason: string): Promise<void> {
   if (running) {
     console.log(`[worker] pasada en curso; se omite (${reason})`);
@@ -61,9 +56,7 @@ async function safeTick(reason: string): Promise<void> {
   try {
     await Promise.race([
       tick(),
-      new Promise((_, rej) =>
-        setTimeout(() => rej(new Error(`timeout de pasada (${PASS_TIMEOUT / 1000}s)`)), PASS_TIMEOUT),
-      ),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout de pasada (${PASS_TIMEOUT / 1000}s)`)), PASS_TIMEOUT)),
     ]);
     console.log(`[worker] pasada completada en ${Math.round((Date.now() - lastPassStart) / 1000)}s`);
   } catch (err) {
@@ -74,19 +67,20 @@ async function safeTick(reason: string): Promise<void> {
   }
 }
 
-/** Ejecución inmediata solicitada desde el panel ("▶ EJECUTAR AHORA"). */
+/** Cola interna de ejecución inmediata ("▶ EJECUTAR AHORA"). */
 async function queueLoop(): Promise<void> {
-  console.log('[worker] Escuchando cola de ejecución inmediata (bot:queue)');
   while (true) {
     try {
-      const res = await queueRedis.brpop('bot:queue', 0);
-      if (res && res[1]) {
-        console.log(`[worker] Ejecución inmediata para ${res[1]}`);
+      const id = await kv.rpop('bot:queue');
+      if (id) {
+        console.log(`[worker] Ejecución inmediata para ${id}`);
         try {
-          await runBotForUser(res[1]);
+          await runBotForUser(id);
         } catch (err) {
           console.error('[worker] error run inmediato:', (err as Error).message);
         }
+      } else {
+        await sleep(800);
       }
     } catch (err) {
       console.error('[worker] queueLoop error:', (err as Error).message);
@@ -95,33 +89,23 @@ async function queueLoop(): Promise<void> {
   }
 }
 
-/** Programador auto-correctivo: no deriva ni se queda atrás aunque una pasada tarde. */
 async function scheduler(): Promise<void> {
   console.log('[worker] Programador iniciado');
   while (true) {
-    console.log('[worker] prog: leyendo intervalo...');
     let interval = config.botIntervalMs;
     try {
       interval = await getIntervalMs();
-    } catch (e) {
-      console.error('[worker] prog: error getIntervalMs:', (e as Error).message);
-    }
-    console.log('[worker] prog: intervalo =', interval);
-    await redis.set('bot:intervalMs', String(interval)).catch(() => {});
-    console.log('[worker] prog: redis.set ok');
+    } catch {}
+    await kv.set('bot:intervalMs', String(interval)).catch(() => {});
     await heartbeat().catch(() => {});
-    console.log('[worker] prog: heartbeat ok');
     touchHeartbeatFile();
-
     const elapsed = lastPassStart ? Date.now() - lastPassStart : interval;
     const wait = Math.max(5000, interval - elapsed);
-    console.log(`[worker] Próxima pasada en ${Math.round(wait / 1000)}s`);
     await sleep(wait);
     await safeTick('programada');
   }
 }
 
-/** Vigilante: si por cualquier motivo no hay pasadas, las fuerza. */
 async function watchdog(): Promise<void> {
   while (true) {
     await sleep(30_000);
@@ -137,7 +121,6 @@ async function watchdog(): Promise<void> {
   }
 }
 
-/** EJECUTOR "tonto" (sin IA): corre seguido y cumple el plan de la IA. */
 async function execLoop(): Promise<void> {
   console.log(`[worker] Ejecutor (sin IA) iniciado · cada ${config.execIntervalMs}ms`);
   while (true) {
@@ -150,20 +133,18 @@ async function execLoop(): Promise<void> {
   }
 }
 
-async function start(): Promise<void> {
-  console.log(`[worker] HappyTrading worker arrancando. Intervalo base: ${config.botIntervalMs}ms`);
-  try {
-    await redis.set('bot:intervalMs', String(await getIntervalMs().catch(() => config.botIntervalMs)));
-  } catch {}
-  touchHeartbeatFile();
-
-  // Arranca los bucles PRIMERO (no dependen de la pasada inicial).
-  queueLoop();
-  scheduler();
-  watchdog();
-  execLoop();
-  // Pasada inicial en segundo plano (no bloquea el programador).
-  safeTick('inicial');
+/** Arranca los bucles del bot dentro del proceso actual (llamado por el servidor). */
+export function startWorker(): void {
+  (async () => {
+    console.log('[worker] Iniciando bucles del bot (modo unificado)');
+    try {
+      await kv.set('bot:intervalMs', String(await getIntervalMs().catch(() => config.botIntervalMs)));
+    } catch {}
+    touchHeartbeatFile();
+    queueLoop();
+    scheduler();
+    execLoop();
+    watchdog();
+    safeTick('inicial');
+  })();
 }
-
-start();
