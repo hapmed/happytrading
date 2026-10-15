@@ -8,9 +8,9 @@ import { sendMail } from '../lib/email.js';
 const MASK = '••••••';
 
 const smtpSchema = z.object({
-  host: z.string().min(1),
-  port: z.number().int().min(1),
-  secure: z.boolean(),
+  host: z.string().optional().default(''),
+  port: z.number().int().min(1).optional().default(587),
+  secure: z.boolean().optional().default(false),
   user: z.string().optional(),
   pass: z.string().optional(),
   from: z.string().optional(),
@@ -116,7 +116,12 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (body.smtp !== undefined) {
       let smtp: any = body.smtp;
-      if (smtp) smtp = preserveMasked(map.get('smtp'), smtp, 'pass');
+      if (smtp && !smtp.host) {
+        // Sin host => SMTP sin configurar (permite guardar solo Gemini/anti-bots)
+        smtp = {};
+      } else if (smtp) {
+        smtp = preserveMasked(map.get('smtp'), smtp, 'pass');
+      }
       await upsert('smtp', smtp);
     }
     if (body.gemini !== undefined) {
