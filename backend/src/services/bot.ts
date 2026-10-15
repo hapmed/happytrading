@@ -5,7 +5,7 @@ import { generateSignal } from './gemini.js';
 import { queueNotification } from '../lib/notify.js';
 
 // Pares que monitorea el bot por defecto (ampliable desde configuración).
-const WATCH_SYMBOLS = ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdc_mxn'];
+const WATCH_SYMBOLS = ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'];
 
 // Umbral mínimo de confianza para operar y monto por defecto (MXN).
 const CONFIDENCE_THRESHOLD = 0.6;
