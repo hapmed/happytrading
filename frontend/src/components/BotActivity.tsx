@@ -14,6 +14,7 @@ const STATE_LABEL: Record<string, string> = {
 export default function BotActivity() {
   const [data, setData] = useState<any>(null);
   const [running, setRunning] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const consoleRef = useRef<HTMLDivElement>(null);
 
   const load = () =>
@@ -27,11 +28,24 @@ export default function BotActivity() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const state: string = data?.state ?? 'idle';
   const aiWorking = state === 'ai_thinking';
   const botWorking = ['reading_balance', 'ai_thinking', 'placing_order'].includes(state);
   const botAlive = !!data?.botAlive;
   const events: any[] = data?.events ?? [];
+
+  const intervalMs: number = data?.intervalMs ?? 300000;
+  const lastPassAtMs: number | null = data?.lastPassAtMs ?? null;
+  const elapsed = lastPassAtMs ? now - lastPassAtMs : 0;
+  const remainingMs = Math.max(0, intervalMs - elapsed);
+  const progress = Math.min(100, intervalMs > 0 ? (elapsed / intervalMs) * 100 : 0);
+  const mm = Math.floor(remainingMs / 60000);
+  const ss = Math.floor((remainingMs % 60000) / 1000);
 
   const runNow = async () => {
     setRunning(true);
@@ -66,6 +80,17 @@ export default function BotActivity() {
         <PixelButton variant="primary" onClick={runNow} disabled={running}>
           {running ? '◌ EJECUTANDO...' : '▶ EJECUTAR AHORA'}
         </PixelButton>
+      </div>
+
+      <div className="next-run">
+        <div className="next-label">
+          {botWorking
+            ? '◌ IA TRABAJANDO AHORA...'
+            : `◌ PRÓXIMA PASADA DEL BOT EN ${mm}:${ss.toString().padStart(2, '0')}`}
+        </div>
+        <div className={`progress ${botWorking ? 'busy' : ''}`}>
+          <div className="progress-fill" style={botWorking ? undefined : { width: `${progress}%` }} />
+        </div>
       </div>
 
       <div className={`act-stage ${botWorking ? 'busy' : ''}`}>

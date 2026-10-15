@@ -1,4 +1,5 @@
 import { redis } from './redis.js';
+import { config } from '../config.js';
 
 export type BotState =
   | 'idle'
@@ -56,6 +57,8 @@ export interface Activity {
   updatedAt: string | null;
   botAlive: boolean;
   secondsSinceHeartbeat: number | null;
+  intervalMs: number;
+  lastPassAtMs: number | null;
   events: Array<{ t: number; level: LogLevel; message: string }>;
 }
 
@@ -76,6 +79,8 @@ export async function getActivity(userId: string): Promise<Activity> {
     ...state,
     botAlive: ms != null && ms < 360_000,
     secondsSinceHeartbeat: ms != null ? Math.round(ms / 1000) : null,
+    intervalMs: config.botIntervalMs,
+    lastPassAtMs: hb ? new Date(hb).getTime() : null,
     events: logs.map((l) => JSON.parse(l)),
   };
 }

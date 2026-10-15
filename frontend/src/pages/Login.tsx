@@ -27,6 +27,7 @@ export default function Login() {
 
   return (
     <div className="auth-wrap">
+      <img src="/logo.png" alt="HappyTrading" className="auth-logo floaty" />
       <div className="logo-big">HAPPYTRADING</div>
       <div className="logo-sub">▚▚ CRYPTO BOT 8-BIT ▞▞</div>
       <Panel title="▶ INICIAR SESIÓN">

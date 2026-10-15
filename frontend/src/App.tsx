@@ -22,6 +22,7 @@ function Layout({ children }: { children: React.ReactNode }) {
       </div>
       <nav className="topnav">
         <div className="logo">
+          <img src="/logo.png" alt="" className="nav-logo" />
           HAPPYTRADING<span className="cursor" />
         </div>
         <div className="nav-links">
