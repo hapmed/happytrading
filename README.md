@@ -40,7 +40,10 @@ El admin se crea automáticamente en el primer arranque (usuario `hapmed`).
 
 ## Roadmap
 1. ✅ Base: auth JWT, admin, cifrado, SMTP, Docker
-2. Integración Bitso (balance / ticker / órdenes / rendimiento)
-3. Bot IA (worker + Gemini + estadísticas)
-4. Frontend 8-bit completo
-5. Notificaciones + anti-bot (token de registro + Turnstile opcional)
+2. ✅ Integración Bitso (balance / ticker / órdenes)
+3. ✅ Bot IA (worker + Gemini/OpenRouter + estadísticas)
+4. ✅ Frontend 8-bit, PWA, dashboard financiero en vivo
+5. ✅ Régimen de mercado cripto (filtro de riesgo)
+
+## Créditos
+- **Régimen de mercado cripto** adaptado de [`crypto-regime-analyzer`](https://github.com/tradermonty/claude-trading-skills) de **tradermonty/claude-trading-skills** (licencia MIT).
