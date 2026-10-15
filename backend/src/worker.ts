@@ -73,6 +73,10 @@ async function scheduleLoop(): Promise<void> {
 
 async function start(): Promise<void> {
   console.log(`[worker] HappyTrading worker arrancando. Intervalo base: ${config.botIntervalMs}ms`);
+  // Fija el intervalo en Redis cuanto antes (para la barra de progreso del panel)
+  try {
+    await redis.set('bot:intervalMs', String(await getIntervalMs()));
+  } catch {}
   for (let i = 0; i < 30; i++) {
     try {
       await tick();
