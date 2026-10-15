@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Panel, Stat } from './Retro';
-import { WolfMascot } from './wolfSprite';
+import { pickLine } from '../lib/wolfLines';
 
 function fmt(n: number) {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -88,6 +88,7 @@ export default function Portfolio() {
   const [data, setData] = useState<any>(null);
   const [rain, setRain] = useState(0);
   const [flash, setFlash] = useState('');
+  const [line, setLine] = useState('');
   const prevPnl = useRef<number | null>(null);
 
   const load = () => api('/me/portfolio').then(setData).catch(() => {});
@@ -121,6 +122,13 @@ export default function Portfolio() {
   const aCur = useCountUp(current);
   const aInv = useCountUp(invested);
 
+  useEffect(() => {
+    const set = () => setLine(pickLine(gain ? 'profit' : 'loss'));
+    set();
+    const id = setInterval(set, 6000);
+    return () => clearInterval(id);
+  }, [gain]);
+
   const maxHolding = holdings.reduce((m, h) => Math.max(m, Number(h.valueMxn) || 0), 0) || 1;
 
   return (
@@ -131,7 +139,7 @@ export default function Portfolio() {
         </div>
         <div className={`pnl-hero ${gain ? 'gain' : 'loss'}`}>
           <div className="pnl-wolf">
-            <WolfMascot mood={gain ? 'profit' : 'loss'} scale={1.3} />
+            <img src="/wolf.png" alt="El Lobo" className="wolf-img" />
           </div>
           <div className="pnl-info">
             <div className="pnl-label">{gain ? '▲ GANANCIA TOTAL' : '▼ PÉRDIDA TOTAL'}</div>
@@ -142,6 +150,7 @@ export default function Portfolio() {
               {pnlPct >= 0 ? '+' : ''}
               {pnlPct.toFixed(2)}%
             </div>
+            <div className="pnl-phrase">“{line}”</div>
           </div>
           {rain > 0 && <CoinRain n={rain} />}
         </div>

@@ -1,49 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { WOLF, Sprite, Face, useBlink, PX } from './wolfSprite';
-
-// Frases icónicas (inspiradas en la película) + inventadas hilarantes
-const LINES: Record<string, string[]> = {
-  profit: [
-    '¡EL SHOW SIGUE! 🚀',
-    '¡MÁS ES MÁS!',
-    '¡ESTAMOS FORRADOS! 💸',
-    '¿QUÍMICA? ¡DE LA BUENA!',
-    'MI YATE NO SE PAGA SOLO 🛥️',
-    '¡VÉNDEME ESTE BOLÍGRAFO!',
-    'EL MERCADO ME AMA',
-    '¿ALGUIEN DIJO MARTINI? 🍸',
-    'IMPRIMIENDO DINERO 🖨️',
-    '¡ESTO ES MEJOR QUE EL SEXO... Y LAS DROGAS!',
-  ],
-  loss: [
-    'NO ES REAL HASTA QUE LO VENDES 😅',
-    'ESTOY BIEN... ESTOY BIEN 😰',
-    'NECESITO QUÍMICA, MUCHA QUÍMICA',
-    'EL SHOW SIGUE... CREO',
-    'NO MIRES EL GRÁFICO 🙈',
-    '¿QUIÉN VENDE? NADIE VENDE',
-    'ES UNA OPORTUNIDAD... DICEN',
-    'AGUANTA, ES SOLO UN BACHE',
-    'RESPIRA... RES... PIRA 😮‍💨',
-    '¿ALGUIEN TIENE UN MARTINI? 🍸',
-  ],
-  idle: [
-    'VIGILANDO EL MERCADO 👀',
-    'EL SHOW SIGUE',
-    'ESPERANDO LA JUGADA',
-    'AQUÍ NO PASA NADA... AÚN',
-    'TÓMATE UN MARTINI 🍸',
-    '¿COMPRAMOS O ESPERAMOS?',
-    'EL S&P... DIGO, EL BTC, ESTÁ RARO',
-    'MANTÉN LA CALMA Y COMPRA MÁS',
-  ],
-};
+import { pickLine } from '../lib/wolfLines';
 
 export default function WolfBuddy() {
   const [mood, setMood] = useState<'profit' | 'loss' | 'idle'>('idle');
   const [line, setLine] = useState('');
   const [show, setShow] = useState(false);
-  const blink = useBlink();
 
   useEffect(() => {
     const load = async () => {
@@ -69,8 +30,7 @@ export default function WolfBuddy() {
   useEffect(() => {
     let t: any;
     const speak = () => {
-      const arr = LINES[mood] ?? LINES.idle;
-      setLine(arr[Math.floor(Math.random() * arr.length)]);
+      setLine(pickLine(mood));
       setShow(true);
       setTimeout(() => setShow(false), 3400);
       t = setTimeout(speak, 7500 + Math.random() * 6000);
@@ -82,16 +42,10 @@ export default function WolfBuddy() {
     };
   }, [mood]);
 
-  const W = 16 * PX;
-  const H = WOLF.length * PX;
-
   return (
     <div className={`wolfbuddy mood-${mood}`}>
       {show && line && <div className="wolfbuddy-bubble">{line}</div>}
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="wolfbuddy-svg" shapeRendering="crispEdges">
-        <Sprite grid={WOLF} />
-        <Face mood={mood} eyeY={5} eyeX1={6} eyeX2={9} mouthY={7} mouthX={7} blink={blink} />
-      </svg>
+      <img src="/wolf.png" alt="El Lobo" className="wolfbuddy-img" />
     </div>
   );
 }

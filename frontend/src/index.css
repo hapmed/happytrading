@@ -820,29 +820,23 @@ a:hover {
 .bar-fill.usage-red { background: linear-gradient(90deg, var(--red), var(--red)); box-shadow: 0 0 12px rgba(255, 77, 77, 0.6); }
 
 /* ---------- Lobo (mascota) ---------- */
-.wolf-lead { position: relative; }
-.wolf-svg-lead {
+.wolf-img {
   display: block;
-  animation: bob 2.2s ease-in-out infinite;
+  width: 130px;
+  height: auto;
+  image-rendering: pixelated;
+  animation: bob 2.4s ease-in-out infinite;
   filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.45));
 }
-.wolf-lead.mood-bull .wolf-svg-lead { animation: bob 0.8s ease-in-out infinite; }
-.wolf-lead.hop { animation: hop 0.42s ease; }
-@keyframes hop {
-  0%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-18px); }
-}
-.wolf-coin {
-  position: absolute;
-  top: -26px;
-  left: 50%;
-  font-size: 22px;
-  transform: translateX(-50%);
-  animation: coinFloat 1.6s ease-in-out infinite;
-}
-@keyframes coinFloat {
-  0%, 100% { transform: translate(-50%, 0); }
-  50% { transform: translate(-50%, -9px) rotate(18deg); }
+.pnl-hero.gain .wolf-img { animation: bob 0.8s ease-in-out infinite; }
+.pnl-hero.loss .wolf-img { filter: grayscale(0.4) drop-shadow(0 6px 0 rgba(0, 0, 0, 0.45)); }
+.pnl-phrase {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--cyan);
+  margin-top: 12px;
+  max-width: 280px;
+  line-height: 1.7;
 }
 
 /* ---------- Lobo global (mascota en toda la app) ---------- */
@@ -853,14 +847,16 @@ a:hover {
   z-index: 9000;
   pointer-events: none;
 }
-.wolfbuddy-svg {
+.wolfbuddy-img {
   display: block;
-  width: 62px;
+  width: 74px;
   height: auto;
+  image-rendering: pixelated;
   animation: bob 2.4s ease-in-out infinite;
   filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5));
 }
-.wolfbuddy.mood-profit .wolfbuddy-svg { animation: bob 0.8s ease-in-out infinite; }
+.wolfbuddy.mood-profit .wolfbuddy-img { animation: bob 0.8s ease-in-out infinite; }
+.wolfbuddy.mood-loss .wolfbuddy-img { filter: grayscale(0.4) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)); }
 .wolfbuddy-bubble {
   position: absolute;
   right: 60px;
@@ -889,8 +885,9 @@ a:hover {
   to { transform: scale(1); opacity: 1; }
 }
 @media (max-width: 600px) {
-  .wolfbuddy-svg { width: 46px; }
-  .wolfbuddy-bubble { max-width: 150px; font-size: 7px; right: 46px; }
+  .wolfbuddy-img { width: 56px; }
+  .wolfbuddy-bubble { max-width: 150px; font-size: 7px; right: 52px; }
+  .wolf-img { width: 96px; }
 }
 
 /* ---------- Banner AUTO (verde/gris) ---------- */
