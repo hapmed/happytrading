@@ -122,7 +122,10 @@ export async function runBotForUser(userId: string): Promise<void> {
 
   const profile = user.profile ?? 'balanced';
   const minConf = MIN_CONF[profile] ?? 0.6;
-  const symbols = await resolveSymbols(user.symbols, profile, client);
+  const heldCurrencies = balances
+    .filter((b: any) => String(b.currency).toLowerCase() !== 'mxn' && Number(b.total ?? 0) > 0)
+    .map((b: any) => String(b.currency).toLowerCase());
+  const symbols = await resolveSymbols(user.symbols, profile, client, heldCurrencies);
 
   const botSetting = await prisma.setting.findUnique({ where: { key: 'bot' } });
   const regimeFilter = (botSetting?.value as any)?.regimeFilter !== false;
