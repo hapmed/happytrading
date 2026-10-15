@@ -1,0 +1,99 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { api } from '../lib/api';
+import { Panel, PixelButton } from './Retro';
+
+const STATE_LABEL: Record<string, string> = {
+  idle: 'EN ESPERA',
+  reading_balance: 'LEYENDO MERCADO',
+  ai_thinking: 'IA PENSANDO',
+  placing_order: '¡OPERANDO!',
+  done: 'LISTO',
+  error: 'ERROR',
+};
+
+export default function BotActivity() {
+  const [data, setData] = useState<any>(null);
+  const [running, setRunning] = useState(false);
+  const consoleRef = useRef<HTMLDivElement>(null);
+
+  const load = () =>
+    api('/me/activity')
+      .then((d) => setData(d))
+      .catch(() => {});
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 2500);
+    return () => clearInterval(id);
+  }, []);
+
+  const state: string = data?.state ?? 'idle';
+  const aiWorking = state === 'ai_thinking';
+  const botWorking = ['reading_balance', 'ai_thinking', 'placing_order'].includes(state);
+  const botAlive = !!data?.botAlive;
+  const events: any[] = data?.events ?? [];
+
+  const runNow = async () => {
+    setRunning(true);
+    try {
+      await api('/me/run', { method: 'POST' });
+    } catch {}
+    setTimeout(() => {
+      load();
+      setRunning(false);
+    }, 1500);
+  };
+
+  return (
+    <Panel title="◈ CENTRO DE ACTIVIDAD" className="activity-panel">
+      <div className="act-status-row">
+        <div className="act-module app online">
+          <span className="led" />
+          <b>APP</b>
+          <small>ONLINE</small>
+        </div>
+        <div className={`act-module bot ${botWorking ? 'working' : botAlive ? 'alive' : 'off'}`}>
+          <span className="led" />
+          <b>BOT</b>
+          <small>{botWorking ? 'TRABAJANDO' : botAlive ? 'ACTIVO' : 'OFFLINE'}</small>
+        </div>
+        <div className={`act-module ai ${aiWorking ? 'working' : ''}`}>
+          <span className="led" />
+          <b>IA</b>
+          <small>{aiWorking ? 'PENSANDO' : 'REPOSO'}</small>
+        </div>
+        <div style={{ flex: 1 }} />
+        <PixelButton variant="primary" onClick={runNow} disabled={running}>
+          {running ? '◌ EJECUTANDO...' : '▶ EJECUTAR AHORA'}
+        </PixelButton>
+      </div>
+
+      <div className={`act-stage ${botWorking ? 'busy' : ''}`}>
+        <div className="robot">{botWorking ? '🤖' : aiWorking ? '🧠' : '🤖'}</div>
+        <div className="act-eq">
+          {Array.from({ length: 11 }).map((_, i) => (
+            <span key={i} style={{ animationDelay: `${i * 0.1}s` }} />
+          ))}
+        </div>
+        <div className="act-msg">
+          {STATE_LABEL[state] ?? state}
+          {data?.symbol ? ` · ${data.symbol}` : ''}
+          <span className="cursor" />
+        </div>
+      </div>
+
+      <div className="console" ref={consoleRef}>
+        {events.length === 0 && (
+          <div className="console-line muted">
+            Sin actividad todavía. Pulsa ▶ EJECUTAR AHORA para ver al bot en acción.
+          </div>
+        )}
+        {events.map((e, i) => (
+          <div key={i} className={`console-line ${e.level}`}>
+            <span className="ts">{new Date(e.t).toLocaleTimeString()}</span> {e.message}
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}

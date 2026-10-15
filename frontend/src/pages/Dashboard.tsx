@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { Panel, Stat, PixelButton } from '../components/Retro';
+import BotActivity from '../components/BotActivity';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -39,6 +40,8 @@ export default function Dashboard() {
         </h2>
         <span className="floaty" style={{ fontSize: 26 }}>🪙</span>
       </div>
+
+      <BotActivity />
 
       {!user?.hasBitso && (
         <div className="error-msg">

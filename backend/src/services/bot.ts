@@ -3,8 +3,9 @@ import { decrypt } from '../lib/crypto.js';
 import { BitsoClient } from './bitso.js';
 import { generateSignal } from './gemini.js';
 import { queueNotification } from '../lib/notify.js';
+import { setState, logEvent } from '../lib/activity.js';
 
-// Pares que monitorea el bot por defecto (ampliable desde configuración).
+// Pares que monitorea el bot por defecto.
 const WATCH_SYMBOLS = ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'];
 
 // Umbral mínimo de confianza para operar y monto por defecto (MXN).
@@ -30,9 +31,20 @@ export async function runBotForUser(userId: string): Promise<void> {
     apiSecret: decrypt(user.bitsoApiSecret),
   });
 
-  const balances = await client.balance();
+  await setState(userId, 'reading_balance', 'Leyendo saldo de Bitso');
+  await logEvent(userId, 'Conexión Bitso · leyendo saldo', 'info');
 
-  // Snapshot de balance (estadística / histórico de rendimiento).
+  let balances: any[];
+  try {
+    balances = await client.balance();
+  } catch (err) {
+    await logEvent(userId, `Error Bitso: ${(err as Error).message}`, 'error');
+    await setState(userId, 'error', 'Error de conexión Bitso');
+    throw err;
+  }
+
+  await logEvent(userId, `Saldo leído · ${balances.length} monedas`, 'info');
+
   for (const b of balances) {
     await prisma.balanceSnapshot.create({
       data: {
@@ -51,9 +63,11 @@ export async function runBotForUser(userId: string): Promise<void> {
 
   for (const symbol of WATCH_SYMBOLS) {
     try {
+      await setState(userId, 'ai_thinking', 'IA analizando mercado', symbol);
+      await logEvent(userId, `IA analizando ${symbol}`, 'ai');
+
       const ticker = await client.ticker(symbol);
 
-      // Contexto para Gemini (incluye señales recientes para evitar repetir operaciones).
       const recentSignals = await prisma.signal.findMany({
         where: { userId, symbol },
         orderBy: { createdAt: 'desc' },
@@ -96,7 +110,12 @@ export async function runBotForUser(userId: string): Promise<void> {
         },
       });
 
-      // Operar solo con señal fuerte y auto-trading activo.
+      await logEvent(
+        userId,
+        `${symbol} → ${signal.action} (${(signal.confidence * 100).toFixed(0)}%)`,
+        signal.action === 'HOLD' ? 'info' : 'ok',
+      );
+
       if (!user.autoTrade || signal.action === 'HOLD' || signal.confidence < CONFIDENCE_THRESHOLD) {
         continue;
       }
@@ -119,6 +138,9 @@ export async function runBotForUser(userId: string): Promise<void> {
         order.side = 'sell';
         order.major = roundStr(qty, 8);
       }
+
+      await setState(userId, 'placing_order', 'Colocando orden', symbol);
+      await logEvent(userId, `▶ Enviando orden ${String(order.side).toUpperCase()} ${symbol}`, 'ok');
 
       const placed = await client.placeOrder(order);
 
@@ -143,7 +165,11 @@ export async function runBotForUser(userId: string): Promise<void> {
         `${signal.reasoning}\nConfianza: ${(signal.confidence * 100).toFixed(0)}% · Monto: ${order.major ?? order.minor}`,
       );
     } catch (err) {
+      await logEvent(userId, `Error ${symbol}: ${(err as Error).message.slice(0, 80)}`, 'error');
       console.error(`[bot] ${symbol} error usuario ${userId}:`, (err as Error).message);
     }
   }
+
+  await setState(userId, 'idle', 'En espera');
+  await logEvent(userId, 'Pasada completada', 'info');
 }

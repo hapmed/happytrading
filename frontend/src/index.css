@@ -579,3 +579,181 @@ a:hover {
     padding: 6px 4px;
   }
 }
+
+/* ---------- Centro de Actividad ---------- */
+.activity-panel {
+  position: relative;
+  overflow: hidden;
+}
+.activity-panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.07), transparent);
+  animation: scanx 6s linear infinite;
+  pointer-events: none;
+}
+@keyframes scanx {
+  0% { left: -30%; }
+  100% { left: 130%; }
+}
+
+.act-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.act-module {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 3px solid var(--panel-border);
+  background: var(--bg2);
+  padding: 8px 12px;
+  min-width: 92px;
+  box-shadow: 3px 3px 0 var(--panel-shadow);
+}
+.act-module b {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+}
+.act-module small {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--muted);
+}
+.act-module .led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2b2b55;
+  display: block;
+  margin-bottom: 4px;
+}
+.act-module.online,
+.act-module.alive {
+  border-color: var(--green);
+}
+.act-module.online .led,
+.act-module.alive .led {
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green);
+  animation: blink 1.6s steps(2) infinite;
+}
+.act-module.working {
+  border-color: var(--yellow);
+}
+.act-module.working .led {
+  background: var(--yellow);
+  box-shadow: 0 0 14px var(--yellow);
+  animation: blink 0.3s steps(2) infinite;
+}
+.act-module.ai.working {
+  border-color: var(--cyan);
+}
+.act-module.ai.working .led {
+  background: var(--cyan);
+  box-shadow: 0 0 14px var(--cyan);
+}
+.act-module.off {
+  border-color: var(--red);
+}
+.act-module.off .led {
+  background: var(--red);
+}
+
+.act-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 3px dashed var(--panel-border);
+  background: var(--bg);
+  margin-bottom: 14px;
+}
+.robot {
+  font-size: 54px;
+  line-height: 1;
+  animation: bob 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 157, 0.45));
+}
+.act-stage.busy .robot {
+  animation: bob 0.5s ease-in-out infinite, shake 0.3s linear infinite;
+  filter: drop-shadow(0 0 16px rgba(255, 230, 0, 0.9));
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes shake {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+
+.act-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 36px;
+}
+.act-eq span {
+  width: 8px;
+  height: 8px;
+  background: var(--green);
+  animation: eq 1s ease-in-out infinite;
+}
+.act-stage.busy .act-eq span {
+  background: var(--yellow);
+  animation-duration: 0.3s;
+}
+@keyframes eq {
+  0%, 100% { height: 6px; }
+  50% { height: 32px; }
+}
+
+.act-msg {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--cyan);
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+.act-msg .cursor {
+  display: inline-block;
+  width: 7px;
+  height: 12px;
+  background: var(--green);
+  margin-left: 6px;
+  vertical-align: middle;
+  animation: blink 1s steps(2) infinite;
+}
+
+.console {
+  background: #04040a;
+  border: 3px solid var(--panel-border);
+  height: 190px;
+  overflow-y: auto;
+  padding: 10px;
+  font-family: var(--font-term);
+  font-size: 17px;
+}
+.console-line {
+  white-space: pre-wrap;
+  line-height: 1.35;
+}
+.console-line .ts {
+  color: var(--muted);
+}
+.console-line.ai { color: var(--cyan); }
+.console-line.ok { color: var(--green); }
+.console-line.error { color: var(--red); }
+.console-line.warn { color: var(--yellow); }
+.console-line.info { color: var(--text); }
