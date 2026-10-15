@@ -6,6 +6,7 @@ import { Panel, Stat, PixelButton } from '../components/Retro';
 import BotActivity from '../components/BotActivity';
 import Portfolio from '../components/Portfolio';
 import AutoStatus from '../components/AutoStatus';
+import RegimeGauge from '../components/RegimeGauge';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -48,6 +49,7 @@ export default function Dashboard() {
 
       <AutoStatus />
       <Portfolio />
+      <RegimeGauge />
       <BotActivity />
 
       {!user?.hasBitso && (

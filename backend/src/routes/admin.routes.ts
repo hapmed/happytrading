@@ -20,7 +20,7 @@ const settingsSchema = z.object({
   smtp: smtpSchema.nullable().optional(),
   gemini: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   openrouter: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
-  bot: z.object({ intervalMs: z.number().int().min(30000) }).nullable().optional(),
+  bot: z.object({ intervalMs: z.number().int().min(30000).optional(), regimeFilter: z.boolean().optional() }).nullable().optional(),
   registration_token: z.object({ value: z.string() }).nullable().optional(),
   turnstile: z.object({ siteKey: z.string(), secretKey: z.string() }).nullable().optional(),
 });

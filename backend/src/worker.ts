@@ -62,6 +62,8 @@ async function scheduleLoop(): Promise<void> {
       interval = await getIntervalMs();
     } catch {}
     await redis.set('bot:intervalMs', String(interval)).catch(() => {});
+    await heartbeat().catch(() => {});
+    console.log(`[worker] Próxima pasada en ${Math.round(interval / 1000)}s`);
     await sleep(interval);
     try {
       await tick();

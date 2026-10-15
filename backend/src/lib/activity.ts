@@ -75,12 +75,13 @@ export async function getActivity(userId: string): Promise<Activity> {
     : { state: 'idle' as BotState, message: 'En espera', symbol: null, updatedAt: null };
 
   const ms = hb ? Date.now() - new Date(hb).getTime() : null;
+  const intervalMs = intervalRaw ? Number(intervalRaw) : config.botIntervalMs;
 
   return {
     ...state,
-    botAlive: ms != null && ms < 360_000,
+    botAlive: ms != null && ms < Math.max(300_000, intervalMs + 180_000),
     secondsSinceHeartbeat: ms != null ? Math.round(ms / 1000) : null,
-    intervalMs: intervalRaw ? Number(intervalRaw) : config.botIntervalMs,
+    intervalMs,
     lastPassAtMs: hb ? new Date(hb).getTime() : null,
     events: logs.map((l) => JSON.parse(l)),
   };

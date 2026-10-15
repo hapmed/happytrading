@@ -13,6 +13,7 @@ export default function Admin() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [secure, setSecure] = useState(false);
+  const [regimeFilter, setRegimeFilter] = useState(true);
 
   const load = () => {
     Promise.all([api('/admin/stats'), api('/admin/users'), api('/admin/settings')])
@@ -21,6 +22,7 @@ export default function Admin() {
         setUsers(u);
         setSettings(cfg);
         setSecure(!!cfg.smtp?.secure);
+        setRegimeFilter(cfg.bot?.regimeFilter !== false);
       })
       .catch((e) => setErr(e.message));
   };
@@ -96,7 +98,7 @@ export default function Admin() {
           },
           gemini: f.gemini_key.value || f.gemini_model.value ? { apiKey: f.gemini_key.value, model: f.gemini_model.value } : null,
           openrouter: f.or_key.value || f.or_model.value ? { apiKey: f.or_key.value, model: f.or_model.value } : null,
-          bot: { intervalMs: Math.max(30, Number(f.bot_interval.value) || 300) * 1000 },
+          bot: { intervalMs: Math.max(30, Number(f.bot_interval.value) || 300) * 1000, regimeFilter },
           registration_token: f.reg_token.value ? { value: f.reg_token.value } : null,
           turnstile: f.ts_site.value
             ? { siteKey: f.ts_site.value, secretKey: f.ts_secret.value }
@@ -273,6 +275,14 @@ export default function Admin() {
             </Field>
             <p className="muted mb" style={{ fontSize: 16 }}>
               Mínimo 30. Con Gemini + OpenRouter puedes bajar a 60–120 s.
+            </p>
+            <Toggle
+              label={`FILTRO DE RÉGIMEN: ${regimeFilter ? 'ON' : 'OFF'}`}
+              checked={regimeFilter}
+              onChange={(v: boolean) => setRegimeFilter(v)}
+            />
+            <p className="muted mb" style={{ fontSize: 16 }}>
+              Con el filtro ON, el bot <b>no compra cuando el régimen es RISK-OFF</b>.
             </p>
 
             <h3 style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: 'var(--cyan)' }} className="mb">

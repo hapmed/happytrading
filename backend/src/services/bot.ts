@@ -5,6 +5,7 @@ import { generateSignal } from './ai.js';
 import { queueNotification } from '../lib/notify.js';
 import { setState, logEvent } from '../lib/activity.js';
 import { valuePortfolio } from '../lib/portfolio.js';
+import { getRegime } from './regime.js';
 
 // Pares que monitorea el bot por defecto.
 const WATCH_SYMBOLS = ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'];
@@ -73,6 +74,21 @@ export async function runBotForUser(userId: string): Promise<void> {
   const mxnAvailable = Number(mxn?.available ?? '0');
   const maxOrder = user.maxOrderAmount ? Number(user.maxOrderAmount) : DEFAULT_ORDER_MXN;
 
+  // Régimen de mercado (filtro de riesgo)
+  const botSetting = await prisma.setting.findUnique({ where: { key: 'bot' } });
+  const regimeFilter = (botSetting?.value as any)?.regimeFilter !== false; // por defecto: activado
+  let regime: Awaited<ReturnType<typeof getRegime>> | null = null;
+  try {
+    regime = await getRegime();
+  } catch {}
+  if (regime) {
+    await logEvent(
+      userId,
+      `Régimen de mercado: ${regime.zone} (${regime.score}/100)${regime.cached ? ' · cache' : ''}`,
+      regime.zone === 'RISK_OFF' ? 'warn' : 'info',
+    );
+  }
+
   for (const symbol of WATCH_SYMBOLS) {
     try {
       await setState(userId, 'ai_thinking', 'IA analizando mercado', symbol);
@@ -135,6 +151,10 @@ export async function runBotForUser(userId: string): Promise<void> {
       const order: any = { book: symbol, type: 'market' };
 
       if (signal.action === 'BUY') {
+        if (regimeFilter && regime && regime.zone === 'RISK_OFF') {
+          await logEvent(userId, `Compra bloqueada por régimen RISK_OFF · ${symbol}`, 'warn');
+          continue;
+        }
         const spend = Math.min(maxOrder, mxnAvailable);
         if (spend <= 1) continue;
         order.side = 'buy';

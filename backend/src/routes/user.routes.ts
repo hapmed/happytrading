@@ -7,6 +7,7 @@ import { BitsoClient } from '../services/bitso.js';
 import { getActivity } from '../lib/activity.js';
 import { redis } from '../lib/redis.js';
 import { getLiveValuation } from '../lib/portfolio.js';
+import { getRegime } from '../services/regime.js';
 
 const bitsoSchema = z.object({
   apiKey: z.string().min(1),
@@ -106,6 +107,11 @@ export async function userRoutes(app: FastifyInstance) {
   // Centro de actividad: estado del bot + consola en vivo
   app.get('/activity', { preHandler: [authenticate] }, async (req) => {
     return getActivity(req.user.sub);
+  });
+
+  // Régimen de mercado cripto (adaptado de crypto-regime-analyzer)
+  app.get('/regime', { preHandler: [authenticate] }, async () => {
+    return getRegime();
   });
 
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)

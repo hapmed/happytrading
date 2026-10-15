@@ -44,6 +44,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** fetch con timeout para que un proveedor lento no bloquee la pasada. */
+async function fetchWithTimeout(url: string, opts: RequestInit, ms = 15000): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 function uniq(arr: string[]): string[] {
   return [...new Set(arr.filter(Boolean))];
 }
@@ -64,7 +75,7 @@ async function callGemini(model: string, apiKey: string, prompt: string): Promis
   };
   const start = Date.now();
   try {
-    const res = await fetch(`${GEMINI_BASE}/models/${model}:generateContent?key=${apiKey}`, {
+    const res = await fetchWithTimeout(`${GEMINI_BASE}/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -97,7 +108,7 @@ async function callOpenRouter(model: string, apiKey: string, prompt: string): Pr
   };
   const start = Date.now();
   try {
-    const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    const res = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
