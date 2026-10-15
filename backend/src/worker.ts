@@ -6,6 +6,9 @@ import { runBotForUser } from './services/bot.js';
 import { redis } from './lib/redis.js';
 import { heartbeat } from './lib/activity.js';
 
+// Conexión DEDICADA para el BRPOP bloqueante (si no, bloquea el resto de comandos).
+const queueRedis = redis.duplicate();
+
 const PASS_TIMEOUT = 180_000; // ninguna pasada puede colgarse más de 3 min
 const HEARTBEAT_FILE = '/tmp/worker-heartbeat';
 
