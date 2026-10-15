@@ -26,11 +26,12 @@ export function Stat({ label, value, accent = '' }: any) {
   );
 }
 
-export function Field({ label, children }: any) {
+export function Field({ label, help, children }: any) {
   return (
     <label className="field">
       <span className="field-label">{label}</span>
       {children}
+      {help && <small className="field-help">{help}</small>}
     </label>
   );
 }

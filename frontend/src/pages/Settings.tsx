@@ -105,7 +105,10 @@ export default function Settings() {
             checked={user?.tradingEnabled}
             onChange={(v: boolean) => updatePref({ tradingEnabled: v })}
           />
-          <Field label="MONTO MÁXIMO POR ORDEN (MXN)">
+          <Field
+            label="MONTO MÁXIMO POR ORDEN (MXN)"
+            help="Tope de dinero por cada compra. El bot nunca gastará más que esto en una sola orden."
+          >
             <input
               className="pixel-input"
               type="number"
@@ -117,7 +120,10 @@ export default function Settings() {
               placeholder="ej. 5000"
             />
           </Field>
-          <Field label="STOP-LOSS %">
+          <Field
+            label="STOP-LOSS %"
+            help="Vende SOLO (frena la pérdida) cuando el precio cae este % respecto a tu costo. Ej.: 4% → si baja 4%, vende."
+          >
             <input
               className="pixel-input"
               type="number"
@@ -129,7 +135,10 @@ export default function Settings() {
               placeholder="ej. 3"
             />
           </Field>
-          <Field label="TAKE-PROFIT %">
+          <Field
+            label="TAKE-PROFIT %"
+            help="Vende SOLO (asegura ganancia) cuando el precio sube este % respecto a tu costo. Ej.: 8% → si sube 8%, vende."
+          >
             <input
               className="pixel-input"
               type="number"
@@ -141,7 +150,10 @@ export default function Settings() {
               placeholder="ej. 5"
             />
           </Field>
-          <Field label="INVERSIÓN INICIAL / CAPITAL (MXN)">
+          <Field
+            label="INVERSIÓN INICIAL / CAPITAL (MXN)"
+            help="Cuánto dinero metiste al empezar. Sirve para calcular tu ganancia. Los depósitos posteriores se suman solos."
+          >
             <input
               className="pixel-input"
               type="number"
@@ -153,7 +165,10 @@ export default function Settings() {
               placeholder="ej. 10000  (para calcular tu ganancia)"
             />
           </Field>
-          <Field label="RIESGO POR OPERACIÓN (% del capital)">
+          <Field
+            label="RIESGO POR OPERACIÓN (% del capital)"
+            help="Qué % de tu capital arriesgas por operación. Define el tamaño de la compra (a mayor riesgo, compras más grandes). 1% prudente · 4% agresivo."
+          >
             <input
               className="pixel-input"
               type="number"
@@ -165,7 +180,10 @@ export default function Settings() {
               placeholder="ej. 1  (position-sizer)"
             />
           </Field>
-          <Field label="RESERVA DE EFECTIVO (%)">
+          <Field
+            label="RESERVA DE EFECTIVO (%)"
+            help="Cuánto dinero (MXN) dejas SIN invertir como colchón. Ej.: 10% siempre en efectivo. 0% = invierte todo."
+          >
             <input
               className="pixel-input"
               type="number"
@@ -191,13 +209,18 @@ export default function Settings() {
             </div>
             <small className="muted">
               {user?.profile === 'aggressive'
-                ? 'AGRESIVO: 8 pares, umbral 50%, busca más ganancia (más riesgo).'
+                ? 'AGRESIVO: 8 pares, umbral 50% (decide comprar con poca señal), busca más ganancia y hace más operaciones (más riesgo).'
                 : user?.profile === 'conservative'
-                  ? 'CONSERVADOR: 2 pares, umbral 70% (más seguro).'
-                  : 'EQUILIBRADO: 5 pares, umbral 60%.'}
+                  ? 'CONSERVADOR: 2 pares, umbral 70% (solo compra con señal muy fuerte) — más seguro, opera menos.'
+                  : 'EQUILIBRADO: 5 pares, umbral 60%. Punto medio entre seguridad y actividad.'}
             </small>
+            <br />
+            <small className="muted">El perfil define pares y cuán exigente es la IA para operar (umbral de confianza).</small>
           </div>
-          <Field label="PARES A OPERAR (coma-separados, o escribe 'auto')">
+          <Field
+            label="PARES A OPERAR (coma-separados, o escribe 'auto')"
+            help="Qué monedas vigila. 'auto' = todos los pares MXN de Bitso · escríbelos (btc_mxn,eth_mxn) · vacío = según el perfil."
+          >
             <input
               className="pixel-input"
               defaultValue={user?.symbols ?? ''}
@@ -208,7 +231,10 @@ export default function Settings() {
           <p className="muted mb" style={{ fontSize: 16 }}>
             <b>auto</b> = todos los pares contra MXN de Bitso · vacío = según el perfil. Cualquier cripto con par en MXN funciona.
           </p>
-          <Field label="ESCALERA DCA · Nº DE NIVELES">
+          <Field
+            label="ESCALERA DCA · Nº DE NIVELES"
+            help="En cuántos tramos parte una compra. 4 = va comprando por 4 precios que bajan (promedia la entrada). 1 = todo de golpe."
+          >
             <input
               className="pixel-input"
               type="number"
@@ -220,7 +246,10 @@ export default function Settings() {
               placeholder="ej. 3  (compra por tramos)"
             />
           </Field>
-          <Field label="ESCALERA DCA · SEPARACIÓN ENTRE NIVELES (%)">
+          <Field
+            label="ESCALERA DCA · SEPARACIÓN ENTRE NIVELES (%)"
+            help="Distancia entre cada nivel de la escalera. Ej.: 2% → compra a X, a X−2%, a X−4%, a X−6%."
+          >
             <input
               className="pixel-input"
               type="number"
