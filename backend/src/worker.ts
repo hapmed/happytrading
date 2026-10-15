@@ -78,7 +78,7 @@ async function queueLoop(): Promise<void> {
   console.log('[worker] Escuchando cola de ejecución inmediata (bot:queue)');
   while (true) {
     try {
-      const res = await redis.brpop('bot:queue', 0);
+      const res = await queueRedis.brpop('bot:queue', 0);
       if (res && res[1]) {
         console.log(`[worker] Ejecución inmediata para ${res[1]}`);
         try {
