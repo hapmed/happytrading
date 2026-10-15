@@ -25,6 +25,8 @@ export default function Usage() {
         const l = data.limits?.[p] ?? { requestsPerDay: 0, tokensPerDay: 0 };
         const rPct = l.requestsPerDay ? Math.min(100, (u.requests / l.requestsPerDay) * 100) : 0;
         const tPct = l.tokensPerDay ? Math.min(100, (u.tokens / l.tokensPerDay) * 100) : 0;
+        const q = p === 'openrouter' ? data.openrouterQuota : null;
+        const usedPct = q && q.limit ? Math.min(100, ((q.limit - (q.remaining ?? 0)) / q.limit) * 100) : null;
         return (
           <div className="usage-block" key={p}>
             <div className="holding-top">
@@ -39,6 +41,20 @@ export default function Usage() {
             <div className="bar" style={{ marginTop: 4 }}>
               <div className={`bar-fill usage-${level(tPct)}`} style={{ width: `${tPct}%` }} />
             </div>
+            <small className="muted">
+              {q && q.limit != null ? (
+                <>Restante REAL de la API: <b>{q.remaining}</b> / {q.limit} ({q.reset ?? 'diario'})</>
+              ) : p === 'gemini' ? (
+                <>Google NO expone la cuota restante por API — revisa Google AI Studio. Este es tu estimado.</>
+              ) : (
+                <>Restante real: no disponible (sin key o sin conexión).</>
+              )}
+            </small>
+            {usedPct != null && (
+              <div className="bar" style={{ marginTop: 4 }}>
+                <div className={`bar-fill usage-${level(usedPct)}`} style={{ width: `${usedPct}%` }} />
+              </div>
+            )}
           </div>
         );
       })}

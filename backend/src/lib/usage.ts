@@ -121,3 +121,28 @@ export async function loadUsage(): Promise<void> {
   const rows = await prisma.usageDay.findMany({ where: { day } }).catch(() => []);
   for (const r of rows) mem.set(`${r.day}|${r.provider}`, { requests: r.requests, tokens: r.tokens, errors: r.errors });
 }
+
+export interface OrQuota {
+  limit: number | null;
+  remaining: number | null;
+  reset: string | null;
+}
+
+/** Consulta el uso/restante REAL de OpenRouter (sí expone endpoint). */
+export async function getOpenRouterQuota(apiKey: string): Promise<OrQuota | null> {
+  if (!apiKey) return null;
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const d: any = await res.json();
+    const data = d?.data ?? {};
+    return {
+      limit: typeof data.limit === 'number' ? data.limit : null,
+      remaining: typeof data.limit_remaining === 'number' ? data.limit_remaining : null,
+      reset: data.limit_reset ?? null,
+    };
+  } catch {
+    return null;
+  }
+}

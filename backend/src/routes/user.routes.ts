@@ -8,7 +8,7 @@ import { getActivity } from '../lib/activity.js';
 import { kv } from '../lib/kv.js';
 import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
-import { getUsage, getLimits } from '../lib/usage.js';
+import { getUsage, getLimits, getOpenRouterQuota } from '../lib/usage.js';
 
 const bitsoSchema = z.object({
   apiKey: z.string().min(1),
@@ -123,7 +123,10 @@ export async function userRoutes(app: FastifyInstance) {
 
   // Consumo de IA del día (tokens/peticiones) y límites del free tier
   app.get('/usage', { preHandler: [authenticate] }, async () => {
-    return { ...getUsage(), limits: await getLimits() };
+    const or = await prisma.setting.findUnique({ where: { key: 'openrouter' } });
+    const orKey = (or?.value as any)?.apiKey || '';
+    const [limits, quota] = await Promise.all([getLimits(), getOpenRouterQuota(orKey)]);
+    return { ...getUsage(), limits, openrouterQuota: quota };
   });
 
   // Mis posiciones con PnL no realizado (memoria de operaciones)
