@@ -197,6 +197,17 @@ export default function Settings() {
                   : 'EQUILIBRADO: 5 pares, umbral 60%.'}
             </small>
           </div>
+          <Field label="PARES A OPERAR (coma-separados, o escribe 'auto')">
+            <input
+              className="pixel-input"
+              defaultValue={user?.symbols ?? ''}
+              onBlur={(e) => updatePref({ symbols: e.target.value.trim().toLowerCase() })}
+              placeholder="auto  ó  btc_mxn,eth_mxn,xrp_mxn"
+            />
+          </Field>
+          <p className="muted mb" style={{ fontSize: 16 }}>
+            <b>auto</b> = todos los pares contra MXN de Bitso · vacío = según el perfil. Cualquier cripto con par en MXN funciona.
+          </p>
         </div>
       </Panel>
     </div>

@@ -31,20 +31,35 @@ async function clearPending(userId: string, symbol: string): Promise<void> {
  *  - "a,b,c"       → lista personalizada
  *  - vacío         → según el perfil
  */
-async function resolveSymbols(custom: string | null, profile: string, client: BitsoClient): Promise<string[]> {
+async function resolveSymbols(
+  custom: string | null,
+  profile: string,
+  client: BitsoClient,
+  heldCurrencies: string[],
+): Promise<string[]> {
   const c = (custom ?? '').trim().toLowerCase();
+  let base: string[];
   if (c === 'auto') {
     try {
       const books = await client.availableBooks();
       const mxn = books.map((b: any) => String(b.book ?? '')).filter((bk: string) => bk.endsWith('_mxn'));
-      if (mxn.length) return mxn;
-    } catch {}
-    return SYMBOLS[profile] ?? SYMBOLS.balanced;
+      base = mxn.length ? mxn : SYMBOLS[profile] ?? SYMBOLS.balanced;
+    } catch {
+      base = SYMBOLS[profile] ?? SYMBOLS.balanced;
+    }
+  } else if (c) {
+    base = c.split(',').map((s) => s.trim()).filter(Boolean);
+  } else {
+    base = SYMBOLS[profile] ?? SYMBOLS.balanced;
   }
-  if (c) {
-    return c.split(',').map((s) => s.trim()).filter(Boolean);
+
+  // Incluye TODAS las monedas que el usuario tenga (para poder gestionarlas/venderlas).
+  const set = new Set(base);
+  for (const cur of heldCurrencies) {
+    if (!cur || cur === 'mxn') continue;
+    set.add(`${cur}_mxn`);
   }
-  return SYMBOLS[profile] ?? SYMBOLS.balanced;
+  return [...set];
 }
 
 /**
