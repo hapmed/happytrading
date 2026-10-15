@@ -14,7 +14,7 @@ export const config = {
   },
   // Valores por defecto (luego se sobrescriben desde el panel admin)
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
-  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
+  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite',
   bitsoApiBase: process.env.BITSO_API_BASE ?? 'https://bitso.com',
   botIntervalMs: Number(process.env.BOT_INTERVAL_MS ?? 300000),
   registrationToken: process.env.REGISTRATION_TOKEN ?? '',

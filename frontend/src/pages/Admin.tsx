@@ -94,7 +94,7 @@ export default function Admin() {
             pass: f.smtp_pass.value || undefined,
             from: f.smtp_from.value || undefined,
           },
-          gemini: f.gemini_key.value ? { apiKey: f.gemini_key.value } : null,
+          gemini: f.gemini_key.value || f.gemini_model.value ? { apiKey: f.gemini_key.value, model: f.gemini_model.value } : null,
           registration_token: f.reg_token.value ? { value: f.reg_token.value } : null,
           turnstile: f.ts_site.value
             ? { siteKey: f.ts_site.value, secretKey: f.ts_secret.value }
@@ -245,6 +245,9 @@ export default function Admin() {
             </h3>
             <Field label="API KEY">
               <input className="pixel-input" name="gemini_key" type="password" defaultValue={settings.gemini?.apiKey ?? ''} placeholder={settings.gemini?.apiKey ? '••••••' : ''} />
+            </Field>
+            <Field label="MODELO">
+              <input className="pixel-input" name="gemini_model" defaultValue={settings.gemini?.model ?? 'gemini-3.1-flash-lite'} placeholder="gemini-3.1-flash-lite" />
             </Field>
 
             <h3 style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: 'var(--cyan)' }} className="mb">

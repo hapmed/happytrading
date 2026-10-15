@@ -18,7 +18,7 @@ const smtpSchema = z.object({
 
 const settingsSchema = z.object({
   smtp: smtpSchema.nullable().optional(),
-  gemini: z.object({ apiKey: z.string() }).nullable().optional(),
+  gemini: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   registration_token: z.object({ value: z.string() }).nullable().optional(),
   turnstile: z.object({ siteKey: z.string(), secretKey: z.string() }).nullable().optional(),
 });
