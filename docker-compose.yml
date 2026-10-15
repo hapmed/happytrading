@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-happytrading}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-happytrading}
+      POSTGRES_DB: ${POSTGRES_DB:-happytrading}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks: [happytrading-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-happytrading} -d ${POSTGRES_DB:-happytrading}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [happytrading-net]
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment: &backend-env
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-happytrading}:${POSTGRES_PASSWORD:-happytrading}@db:5432/${POSTGRES_DB:-happytrading}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-hapmed}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@happytrading.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      REGISTRATION_TOKEN: ${REGISTRATION_TOKEN:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      PORT: 4000
+    ports:
+      - "127.0.0.1:${API_PORT:-4000}:4000"
+    networks: [happytrading-net]
+
+  worker:
+    build: ./backend
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment: *backend-env
+    networks: [happytrading-net]
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8082}:80"
+    networks: [happytrading-net]
+
+volumes:
+  db_data:
+
+networks:
+  happytrading-net:
+    driver: bridge

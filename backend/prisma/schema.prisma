@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id             String     @id @default(cuid())
+  username       String?    @unique
+  email          String     @unique
+  passwordHash   String
+  name           String?
+  role           Role       @default(USER)
+  status         UserStatus @default(ACTIVE)
+  verified       Boolean    @default(false)
+
+  // Integración Bitso (claves cifradas AES-256-GCM)
+  bitsoApiKey    String?
+  bitsoApiSecret String?
+
+  // Preferencias de trading
+  tradingEnabled Boolean    @default(true)
+  autoTrade      Boolean    @default(true)
+  maxOrderAmount Decimal?   @db.Decimal(18, 8)
+  stopLossPct    Decimal?   @db.Decimal(6, 3)
+  takeProfitPct  Decimal?   @db.Decimal(6, 3)
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  trades        Trade[]
+  signals       Signal[]
+  notifications Notification[]
+  snapshots     BalanceSnapshot[]
+
+  @@map("users")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model Trade {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol     String
+  side       String // BUY | SELL
+  amount     Decimal  @db.Decimal(18, 8)
+  price      Decimal  @db.Decimal(18, 8)
+  status     String   @default("PENDING") // PENDING | FILLED | CANCELLED | FAILED
+  source     String   @default("MANUAL") // MANUAL | AI
+  signalId   String?
+  pnl        Decimal? @db.Decimal(18, 8)
+  reason     String?
+  externalId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@map("trades")
+}
+
+model Signal {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol     String
+  action     String // BUY | SELL | HOLD
+  confidence Decimal  @db.Decimal(6, 3)
+  reasoning  String?
+  tokensUsed Int      @default(0)
+  latencyMs  Int      @default(0)
+  executed   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("signals")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  subject   String
+  body      String
+  status    String    @default("PENDING") // PENDING | SENT | FAILED
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model BalanceSnapshot {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency   String
+  available  Decimal  @db.Decimal(18, 8)
+  locked     Decimal  @db.Decimal(18, 8)
+  total      Decimal  @db.Decimal(18, 8)
+  capturedAt DateTime @default(now())
+
+  @@index([userId, currency, capturedAt])
+  @@map("balance_snapshots")
+}
