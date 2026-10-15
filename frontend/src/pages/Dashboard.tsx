@@ -4,6 +4,8 @@ import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { Panel, Stat, PixelButton } from '../components/Retro';
 import BotActivity from '../components/BotActivity';
+import Portfolio from '../components/Portfolio';
+import AutoStatus from '../components/AutoStatus';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -41,6 +43,8 @@ export default function Dashboard() {
         <span className="floaty" style={{ fontSize: 26 }}>🪙</span>
       </div>
 
+      <AutoStatus />
+      <Portfolio />
       <BotActivity />
 
       {!user?.hasBitso && (

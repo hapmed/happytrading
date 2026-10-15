@@ -141,6 +141,18 @@ export default function Settings() {
               placeholder="ej. 5"
             />
           </Field>
+          <Field label="INVERSIÓN INICIAL / CAPITAL (MXN)">
+            <input
+              className="pixel-input"
+              type="number"
+              defaultValue={user?.initialCapital ?? ''}
+              onBlur={(e) => {
+                const v = parseFloat(e.target.value);
+                if (v >= 0) updatePref({ initialCapital: v });
+              }}
+              placeholder="ej. 10000  (para calcular tu ganancia)"
+            />
+          </Field>
         </div>
       </Panel>
     </div>

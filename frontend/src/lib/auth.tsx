@@ -14,6 +14,7 @@ export interface User {
   maxOrderAmount: string | null;
   stopLossPct: string | null;
   takeProfitPct: string | null;
+  initialCapital: string | null;
 }
 
 interface AuthCtx {

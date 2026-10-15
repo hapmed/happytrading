@@ -4,6 +4,7 @@ import { BitsoClient } from './bitso.js';
 import { generateSignal } from './gemini.js';
 import { queueNotification } from '../lib/notify.js';
 import { setState, logEvent } from '../lib/activity.js';
+import { valuePortfolio } from '../lib/portfolio.js';
 
 // Pares que monitorea el bot por defecto.
 const WATCH_SYMBOLS = ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'];
@@ -55,6 +56,17 @@ export async function runBotForUser(userId: string): Promise<void> {
         total: String(b.total ?? '0'),
       },
     });
+  }
+
+  // Valoración del portafolio en MXN (gráfica de ganancias)
+  try {
+    const val = await valuePortfolio(client, balances);
+    await prisma.portfolioSnapshot.create({
+      data: { userId, totalMxn: String(val.totalMxn), holdings: val.holdings as any },
+    });
+    await logEvent(userId, `Portafolio valuado · $${val.totalMxn.toFixed(2)} MXN`, 'ok');
+  } catch (err) {
+    await logEvent(userId, `Error valuando portafolio: ${(err as Error).message.slice(0, 60)}`, 'warn');
   }
 
   const mxn = balances.find((b) => String(b.currency).toLowerCase() === 'mxn');

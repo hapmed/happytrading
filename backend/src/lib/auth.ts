@@ -16,6 +16,7 @@ export function serializeUser(user: any) {
     maxOrderAmount: user.maxOrderAmount?.toString() ?? null,
     stopLossPct: user.stopLossPct?.toString() ?? null,
     takeProfitPct: user.takeProfitPct?.toString() ?? null,
+    initialCapital: user.initialCapital?.toString() ?? null,
     createdAt: user.createdAt,
   };
 }

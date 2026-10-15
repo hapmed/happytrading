@@ -37,6 +37,7 @@ model User {
   maxOrderAmount Decimal?   @db.Decimal(18, 8)
   stopLossPct    Decimal?   @db.Decimal(6, 3)
   takeProfitPct  Decimal?   @db.Decimal(6, 3)
+  initialCapital Decimal?   @db.Decimal(18, 2)
 
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
@@ -45,6 +46,7 @@ model User {
   signals       Signal[]
   notifications Notification[]
   snapshots     BalanceSnapshot[]
+  portfolio     PortfolioSnapshot[]
 
   @@map("users")
 }
@@ -122,4 +124,16 @@ model BalanceSnapshot {
 
   @@index([userId, currency, capturedAt])
   @@map("balance_snapshots")
+}
+
+model PortfolioSnapshot {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalMxn   Decimal  @db.Decimal(18, 2)
+  holdings   Json?
+  capturedAt DateTime @default(now())
+
+  @@index([userId, capturedAt])
+  @@map("portfolio_snapshots")
 }

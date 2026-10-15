@@ -18,6 +18,7 @@ const tradingSchema = z.object({
   maxOrderAmount: z.number().positive().optional(),
   stopLossPct: z.number().min(0).optional(),
   takeProfitPct: z.number().min(0).optional(),
+  initialCapital: z.number().min(0).optional(),
 });
 
 export async function userRoutes(app: FastifyInstance) {
@@ -104,6 +105,40 @@ export async function userRoutes(app: FastifyInstance) {
   // Centro de actividad: estado del bot + consola en vivo
   app.get('/activity', { preHandler: [authenticate] }, async (req) => {
     return getActivity(req.user.sub);
+  });
+
+  // Portafolio: inversión inicial vs valor actual, ganancia/pérdida e histórico
+  app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const invested = user?.initialCapital ? Number(user.initialCapital) : 0;
+
+    const [latestRows, historyRows] = await Promise.all([
+      prisma.portfolioSnapshot.findMany({
+        where: { userId: req.user.sub },
+        orderBy: { capturedAt: 'desc' },
+        take: 1,
+      }),
+      prisma.portfolioSnapshot.findMany({
+        where: { userId: req.user.sub },
+        orderBy: { capturedAt: 'asc' },
+        take: 300,
+      }),
+    ]);
+
+    const latest = latestRows[0];
+    const currentValue = latest ? Number(latest.totalMxn) : 0;
+    const pnl = invested > 0 ? currentValue - invested : 0;
+    const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+
+    return {
+      invested,
+      currentValue,
+      pnl,
+      pnlPct,
+      holdings: (latest?.holdings as any) ?? [],
+      updatedAt: latest?.capturedAt ?? null,
+      history: historyRows.map((h) => ({ t: h.capturedAt, v: Number(h.totalMxn) })),
+    };
   });
 
   // Lanza una pasada inmediata del bot para este usuario
