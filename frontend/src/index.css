@@ -782,6 +782,29 @@ a:hover {
 .pnl-up { color: var(--green); font-family: var(--font-pixel); font-size: 10px; }
 .pnl-down { color: var(--red); font-family: var(--font-pixel); font-size: 10px; }
 
+/* ---------- ¿Cómo funciona? ---------- */
+.how-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.how-emoji {
+  font-size: 30px;
+  line-height: 1;
+  flex: none;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 157, 0.4));
+}
+.how-title {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--cyan);
+  margin-bottom: 6px;
+}
+.how-text { font-family: var(--font-term); font-size: 18px; color: var(--text); }
+.how-step {
+  font-family: var(--font-term);
+  font-size: 18px;
+  padding: 7px 0;
+  border-bottom: 2px solid rgba(43, 43, 85, 0.5);
+}
+.how-step:last-child { border-bottom: none; }
+
 /* ---------- Banner AUTO (verde/gris) ---------- */
 .auto-banner {
   width: 100%;

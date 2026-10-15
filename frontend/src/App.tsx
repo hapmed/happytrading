@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
+import HowItWorks from './pages/HowItWorks';
 
 const TICKER = 'BTC/MXN ▲ · ETH/MXN ▼ · XRP/MXN ▲ · LTC/MXN ▲ · MANA/MXN ▼ · SOL/MXN ▲ · DAI/MXN ◆';
 
@@ -31,6 +32,9 @@ function Layout({ children }: { children: React.ReactNode }) {
           </Link>
           <Link to="/settings" className="pixel-btn small ghost">
             CONFIG
+          </Link>
+          <Link to="/how" className="pixel-btn small ghost">
+            ¿CÓMO?
           </Link>
           {user?.role === 'ADMIN' && (
             <Link to="/admin" className="pixel-btn small ghost">
@@ -74,6 +78,7 @@ export default function App() {
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/settings" element={<Protected><Settings /></Protected>} />
+      <Route path="/how" element={<Protected><HowItWorks /></Protected>} />
       <Route path="/admin" element={<AdminOnly><Admin /></AdminOnly>} />
       <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
