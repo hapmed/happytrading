@@ -38,26 +38,30 @@ async function resolveSymbols(
   heldCurrencies: string[],
 ): Promise<string[]> {
   const c = (custom ?? '').trim().toLowerCase();
+
+  let books: string[] = [];
+  try {
+    const b = await client.availableBooks();
+    books = b.map((x: any) => String(x.book ?? ''));
+  } catch {}
+  const mxnBooks = books.filter((bk) => bk.endsWith('_mxn'));
+  const validSet = new Set(books);
+
   let base: string[];
   if (c === 'auto') {
-    try {
-      const books = await client.availableBooks();
-      const mxn = books.map((b: any) => String(b.book ?? '')).filter((bk: string) => bk.endsWith('_mxn'));
-      base = mxn.length ? mxn : SYMBOLS[profile] ?? SYMBOLS.balanced;
-    } catch {
-      base = SYMBOLS[profile] ?? SYMBOLS.balanced;
-    }
+    base = mxnBooks.length ? mxnBooks : SYMBOLS[profile] ?? SYMBOLS.balanced;
   } else if (c) {
     base = c.split(',').map((s) => s.trim()).filter(Boolean);
   } else {
     base = SYMBOLS[profile] ?? SYMBOLS.balanced;
   }
 
-  // Incluye TODAS las monedas que el usuario tenga (para poder gestionarlas/venderlas).
+  // Incluye las monedas que el usuario posee (solo si tienen par válido en MXN).
   const set = new Set(base);
   for (const cur of heldCurrencies) {
     if (!cur || cur === 'mxn') continue;
-    set.add(`${cur}_mxn`);
+    const cand = `${cur}_mxn`;
+    if (!books.length || validSet.has(cand)) set.add(cand);
   }
   return [...set];
 }
