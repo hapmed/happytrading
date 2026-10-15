@@ -8,6 +8,7 @@ import { getActivity } from '../lib/activity.js';
 import { kv } from '../lib/kv.js';
 import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
+import { getUsage, getLimits } from '../lib/usage.js';
 
 const bitsoSchema = z.object({
   apiKey: z.string().min(1),
@@ -118,6 +119,11 @@ export async function userRoutes(app: FastifyInstance) {
   // Régimen de mercado cripto (adaptado de crypto-regime-analyzer)
   app.get('/regime', { preHandler: [authenticate] }, async () => {
     return getRegime();
+  });
+
+  // Consumo de IA del día (tokens/peticiones) y límites del free tier
+  app.get('/usage', { preHandler: [authenticate] }, async () => {
+    return { ...getUsage(), limits: await getLimits() };
   });
 
   // Mis posiciones con PnL no realizado (memoria de operaciones)

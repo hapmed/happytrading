@@ -6,6 +6,7 @@ import { runBotForUser } from './services/bot.js';
 import { runExecutorAll } from './services/executor.js';
 import { kv } from './lib/kv.js';
 import { heartbeat } from './lib/activity.js';
+import { loadUsage, flushUsage } from './lib/usage.js';
 
 const PASS_TIMEOUT = 180_000;
 const HEARTBEAT_FILE = '/tmp/worker-heartbeat';
@@ -126,6 +127,7 @@ async function execLoop(): Promise<void> {
   while (true) {
     try {
       await runExecutorAll();
+      await flushUsage();
     } catch (err) {
       console.error('[worker] exec error:', (err as Error).message);
     }
@@ -140,6 +142,7 @@ export function startWorker(): void {
     try {
       await kv.set('bot:intervalMs', String(await getIntervalMs().catch(() => config.botIntervalMs)));
     } catch {}
+    await loadUsage().catch(() => {});
     touchHeartbeatFile();
     queueLoop();
     scheduler();

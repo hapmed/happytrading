@@ -21,6 +21,13 @@ const settingsSchema = z.object({
   gemini: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   openrouter: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   bot: z.object({ intervalMs: z.number().int().min(30000).optional(), regimeFilter: z.boolean().optional() }).nullable().optional(),
+  limits: z
+    .object({
+      gemini: z.object({ requestsPerDay: z.number().int().min(0), tokensPerDay: z.number().int().min(0) }),
+      openrouter: z.object({ requestsPerDay: z.number().int().min(0), tokensPerDay: z.number().int().min(0) }),
+    })
+    .nullable()
+    .optional(),
   registration_token: z.object({ value: z.string() }).nullable().optional(),
   turnstile: z.object({ siteKey: z.string(), secretKey: z.string() }).nullable().optional(),
 });
@@ -83,7 +90,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ----- Configuración global -----
   app.get('/settings', { preHandler: [requireAdmin] }, async () => {
-    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot'];
+    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'limits'];
     const rows = await prisma.setting.findMany({ where: { key: { in: keys } } });
     const out: Record<string, unknown> = {};
     for (const r of rows) out[r.key] = r.value;
@@ -139,6 +146,9 @@ export async function adminRoutes(app: FastifyInstance) {
     }
     if (body.bot !== undefined) {
       await upsert('bot', body.bot);
+    }
+    if (body.limits !== undefined) {
+      await upsert('limits', body.limits);
     }
     if (body.registration_token !== undefined) {
       await upsert('registration_token', body.registration_token);

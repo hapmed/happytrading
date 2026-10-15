@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { kv } from '../lib/kv.js';
 import { config } from '../config.js';
+import { recordUsage, isProviderAllowed } from '../lib/usage.js';
 
 export interface MarketSignal {
   symbol: string;
@@ -88,17 +89,21 @@ async function callGemini(model: string, apiKey: string, prompt: string): Promis
     const latencyMs = Date.now() - start;
     const data: any = await res.json().catch(() => ({}));
     if (res.ok && !data?.error) {
+      const tokens = data?.usageMetadata?.totalTokenCount ?? 0;
+      recordUsage('gemini', tokens, true);
       return {
         ok: true,
         text: data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}',
-        tokens: data?.usageMetadata?.totalTokenCount ?? 0,
+        tokens,
         latencyMs,
       };
     }
+    recordUsage('gemini', 0, false);
     const status = res.status;
     const retryable = status === 429 || status === 500 || status === 503 || status === 404;
     return { ok: false, retryable, error: `Gemini ${status}: ${data?.error?.message ?? 'error'}` };
   } catch (err) {
+    recordUsage('gemini', 0, false);
     return { ok: false, retryable: true, error: `Gemini: ${(err as Error).message}` };
   }
 }
@@ -127,10 +132,14 @@ async function callOpenRouter(model: string, apiKey: string, prompt: string): Pr
     const data: any = await res.json().catch(() => ({}));
     const content = data?.choices?.[0]?.message?.content;
     if (res.ok && content) {
-      return { ok: true, text: content, tokens: data?.usage?.total_tokens ?? 0, latencyMs };
+      const tokens = data?.usage?.total_tokens ?? 0;
+      recordUsage('openrouter', tokens, true);
+      return { ok: true, text: content, tokens, latencyMs };
     }
+    recordUsage('openrouter', 0, false);
     return { ok: false, retryable: true, error: `OpenRouter ${res.status}: ${data?.error?.message ?? 'sin contenido'}` };
   } catch (err) {
+    recordUsage('openrouter', 0, false);
     return { ok: false, retryable: true, error: `OpenRouter: ${(err as Error).message}` };
   }
 }
@@ -240,17 +249,17 @@ export async function generateSignal(symbol: string, ctx: MarketContext): Promis
   const work = (async (): Promise<MarketSignal> => {
     const cfg = await getAIConfig();
     const attempts: Attempt[] = [];
-    if (cfg.gemini.apiKey) {
+    if (cfg.gemini.apiKey && (await isProviderAllowed('gemini'))) {
       for (const m of uniq([cfg.gemini.model, ...GEMINI_FALLBACKS]).slice(0, MAX_PER_PROVIDER)) {
         attempts.push({ provider: 'gemini', model: m, key: cfg.gemini.apiKey, run: callGemini });
       }
     }
-    if (cfg.openrouter.apiKey) {
+    if (cfg.openrouter.apiKey && (await isProviderAllowed('openrouter'))) {
       for (const m of uniq([cfg.openrouter.model, ...OPENROUTER_FALLBACKS]).slice(0, MAX_PER_PROVIDER)) {
         attempts.push({ provider: 'openrouter', model: m, key: cfg.openrouter.apiKey, run: callOpenRouter });
       }
     }
-    if (!attempts.length) throw new Error('IA no configurada (Gemini u OpenRouter)');
+    if (!attempts.length) throw new Error('Sin IA disponible (límites diarios alcanzados o no configurada)');
 
     const interleaved = interleave(attempts);
     let offset = 0;

@@ -194,3 +194,15 @@ model Deposit {
   @@index([userId, detectedAt])
   @@map("deposits")
 }
+
+model UsageDay {
+  id       String @id @default(cuid())
+  day      String
+  provider String
+  requests Int    @default(0)
+  tokens   Int    @default(0)
+  errors   Int    @default(0)
+
+  @@unique([day, provider])
+  @@map("usage_days")
+}

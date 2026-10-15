@@ -805,6 +805,12 @@ a:hover {
 }
 .how-step:last-child { border-bottom: none; }
 
+/* ---------- Uso de IA ---------- */
+.usage-block { margin-bottom: 16px; }
+.bar-fill.usage-green { background: linear-gradient(90deg, var(--green), var(--green)); }
+.bar-fill.usage-yellow { background: linear-gradient(90deg, var(--yellow), var(--yellow)); box-shadow: 0 0 12px rgba(255, 230, 0, 0.5); }
+.bar-fill.usage-red { background: linear-gradient(90deg, var(--red), var(--red)); box-shadow: 0 0 12px rgba(255, 77, 77, 0.6); }
+
 /* ---------- Banner AUTO (verde/gris) ---------- */
 .auto-banner {
   width: 100%;

@@ -99,6 +99,10 @@ export default function Admin() {
           gemini: f.gemini_key.value || f.gemini_model.value ? { apiKey: f.gemini_key.value, model: f.gemini_model.value } : null,
           openrouter: f.or_key.value || f.or_model.value ? { apiKey: f.or_key.value, model: f.or_model.value } : null,
           bot: { intervalMs: Math.max(30, Number(f.bot_interval.value) || 300) * 1000, regimeFilter },
+          limits: {
+            gemini: { requestsPerDay: Number(f.lim_gemini_req.value) || 1500, tokensPerDay: Number(f.lim_gemini_tok.value) || 1000000 },
+            openrouter: { requestsPerDay: Number(f.lim_or_req.value) || 50, tokensPerDay: Number(f.lim_or_tok.value) || 1000000 },
+          },
           registration_token: f.reg_token.value ? { value: f.reg_token.value } : null,
           turnstile: f.ts_site.value
             ? { siteKey: f.ts_site.value, secretKey: f.ts_secret.value }
@@ -283,6 +287,25 @@ export default function Admin() {
             />
             <p className="muted mb" style={{ fontSize: 16 }}>
               Con el filtro ON, el bot <b>no compra cuando el régimen es RISK-OFF</b>.
+            </p>
+
+            <h3 style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: 'var(--cyan)' }} className="mb">
+              🚦 LÍMITES DE IA (FREE TIERS)
+            </h3>
+            <Field label="GEMINI · PETICIONES / DÍA">
+              <input className="pixel-input" name="lim_gemini_req" type="number" defaultValue={settings.limits?.gemini?.requestsPerDay ?? 1500} />
+            </Field>
+            <Field label="GEMINI · TOKENS / DÍA">
+              <input className="pixel-input" name="lim_gemini_tok" type="number" defaultValue={settings.limits?.gemini?.tokensPerDay ?? 1000000} />
+            </Field>
+            <Field label="OPENROUTER · PETICIONES / DÍA">
+              <input className="pixel-input" name="lim_or_req" type="number" defaultValue={settings.limits?.openrouter?.requestsPerDay ?? 50} />
+            </Field>
+            <Field label="OPENROUTER · TOKENS / DÍA">
+              <input className="pixel-input" name="lim_or_tok" type="number" defaultValue={settings.limits?.openrouter?.tokensPerDay ?? 1000000} />
+            </Field>
+            <p className="muted mb" style={{ fontSize: 16 }}>
+              Al alcanzar el límite, el bot <b>deja de usar ese proveedor</b> (y sigue con el otro). No te pasas del free tier.
             </p>
 
             <h3 style={{ fontFamily: 'var(--font-pixel)', fontSize: 10, color: 'var(--cyan)' }} className="mb">
