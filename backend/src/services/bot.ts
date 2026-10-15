@@ -8,10 +8,14 @@ import { valuePortfolio } from '../lib/portfolio.js';
 import { getRegime } from './regime.js';
 import { fixedFractionalSize } from '../lib/sizing.js';
 
-// Pares que monitorea el bot por defecto.
-const WATCH_SYMBOLS = ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'];
+// Pares y umbrales por perfil de estrategia.
+const SYMBOLS: Record<string, string[]> = {
+  conservative: ['btc_mxn', 'eth_mxn'],
+  balanced: ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'],
+  aggressive: ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn', 'ltc_mxn', 'trx_mxn', 'mana_mxn'],
+};
+const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.6, aggressive: 0.5 };
 
-const CONFIDENCE_THRESHOLD = 0.6; // confianza mínima de la IA para operar
 const DEFAULT_ORDER_MXN = 200; // si no hay monto máximo configurado
 
 function roundStr(n: number, dp: number): string {
@@ -103,6 +107,10 @@ export async function runBotForUser(userId: string): Promise<void> {
   const stopLossPct = user.stopLossPct ? Number(user.stopLossPct) : 0;
   const takeProfitPct = user.takeProfitPct ? Number(user.takeProfitPct) : 0;
 
+  const profile = user.profile ?? 'balanced';
+  const symbols = SYMBOLS[profile] ?? SYMBOLS.balanced;
+  const minConf = MIN_CONF[profile] ?? 0.6;
+
   // Régimen de mercado (filtro de riesgo)
   const botSetting = await prisma.setting.findUnique({ where: { key: 'bot' } });
   const regimeFilter = (botSetting?.value as any)?.regimeFilter !== false;
@@ -118,7 +126,7 @@ export async function runBotForUser(userId: string): Promise<void> {
     );
   }
 
-  for (const symbol of WATCH_SYMBOLS) {
+  for (const symbol of symbols) {
     try {
       const ticker = await client.ticker(symbol);
       const last = Number(ticker.last ?? 0);
@@ -206,6 +214,7 @@ export async function runBotForUser(userId: string): Promise<void> {
         })),
         recentSignals: recentSignals.map((s) => ({ action: s.action, confidence: String(s.confidence ?? '0') })),
         position: { currency: base, amount: baseAvailable, avgCostMxn: avg > 0 ? avg : null },
+        aggressive: profile === 'aggressive',
       };
 
       const signal = await generateSignal(symbol, ctx);
@@ -218,7 +227,7 @@ export async function runBotForUser(userId: string): Promise<void> {
       });
       await logEvent(userId, `${symbol} → ${signal.action} (${(signal.confidence * 100).toFixed(0)}%)`, signal.action === 'HOLD' ? 'info' : 'ok');
 
-      if (!user.autoTrade || signal.action === 'HOLD' || signal.confidence < CONFIDENCE_THRESHOLD) continue;
+      if (!user.autoTrade || signal.action === 'HOLD' || signal.confidence < minConf) continue;
 
       if (signal.action === 'BUY') {
         if (regimeFilter && regime && regime.zone === 'RISK_OFF') {

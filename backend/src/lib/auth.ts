@@ -10,6 +10,7 @@ export function serializeUser(user: any) {
     role: user.role,
     status: user.status,
     verified: user.verified,
+    profile: user.profile ?? 'balanced',
     hasBitso: Boolean(user.bitsoApiKey),
     tradingEnabled: user.tradingEnabled,
     autoTrade: user.autoTrade,

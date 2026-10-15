@@ -26,6 +26,7 @@ model User {
   role           Role       @default(USER)
   status         UserStatus @default(ACTIVE)
   verified       Boolean    @default(false)
+  profile        String     @default("balanced")
 
   // Integración Bitso (claves cifradas AES-256-GCM)
   bitsoApiKey    String?

@@ -25,6 +25,7 @@ export interface MarketContext {
   balances: Array<{ currency: string; available: string; total: string }>;
   recentSignals: Array<{ action: string; confidence: string }>;
   position?: { currency: string; amount: number; avgCostMxn: number | null };
+  aggressive?: boolean;
 }
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -164,12 +165,14 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
     ? `tienes=${p.amount} ${p.currency}${p.avgCostMxn ? ` costo_promedio=${p.avgCostMxn}` : ''}`
     : 'tienes=0';
   return [
-    `Trader cripto. Par ${symbol}.`,
+    `Trader cripto${ctx.aggressive ? ' AGRESIVO (busca maximizar ganancia)' : ''}. Par ${symbol}.`,
     `last=${t?.last ?? '-'} bid=${t?.bid ?? '-'} ask=${t?.ask ?? '-'} vol24h=${t?.volume ?? '-'}`,
     `MXN_disponible=${mxn?.available ?? '0'}`,
     posLine,
     `señales_previas=${recent}`,
-    `Si tienes el activo y conviene vender (o tomar ganancia / cortar pérdida) responde SELL.`,
+    ctx.aggressive
+      ? `Estrategia agresiva: favorece operar (BUY si hay momentum alcista; SELL si ya tienes y hay ganancia o el impulso se agota).`
+      : `Si tienes el activo y conviene vender (o tomar ganancia / cortar pérdida) responde SELL.`,
     `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=40 chars"}`,
   ].join(' ');
 }

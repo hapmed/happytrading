@@ -23,6 +23,7 @@ const tradingSchema = z.object({
   initialCapital: z.number().min(0).optional(),
   riskPct: z.number().min(0).optional(),
   cashReservePct: z.number().min(0).max(100).optional(),
+  profile: z.enum(['conservative', 'balanced', 'aggressive']).optional(),
 });
 
 export async function userRoutes(app: FastifyInstance) {
