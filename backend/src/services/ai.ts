@@ -30,22 +30,22 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 const GEMINI_FALLBACKS = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.5-flash'];
-
-// Modelos gratuitos de OpenRouter (sin tarjeta). Se usan como respaldo/rotación.
 const OPENROUTER_FALLBACKS = [
   'google/gemma-4-31b-it:free',
   'nvidia/nemotron-3.5-lightning:free',
   'google/gemma-4-26b-a4b-it:free',
   'thinkingmachines/inkling:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
 ];
+
+const CALL_TIMEOUT = 10_000; // por intento
+const SIGNAL_BUDGET = 18_000; // máximo por señal (luego devuelve HOLD)
+const MAX_PER_PROVIDER = 2; // intentos por proveedor (rápido)
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** fetch con timeout para que un proveedor lento no bloquee la pasada. */
-async function fetchWithTimeout(url: string, opts: RequestInit, ms = 15000): Promise<Response> {
+async function fetchWithTimeout(url: string, opts: RequestInit, ms = CALL_TIMEOUT): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
   try {
@@ -94,7 +94,7 @@ async function callGemini(model: string, apiKey: string, prompt: string): Promis
     const retryable = status === 429 || status === 500 || status === 503 || status === 404;
     return { ok: false, retryable, error: `Gemini ${status}: ${data?.error?.message ?? 'error'}` };
   } catch (err) {
-    return { ok: false, retryable: true, error: `Gemini red: ${(err as Error).message}` };
+    return { ok: false, retryable: true, error: `Gemini: ${(err as Error).message}` };
   }
 }
 
@@ -124,13 +124,9 @@ async function callOpenRouter(model: string, apiKey: string, prompt: string): Pr
     if (res.ok && content) {
       return { ok: true, text: content, tokens: data?.usage?.total_tokens ?? 0, latencyMs };
     }
-    const status = res.status;
-    // 429 (rate-limit), 5xx, 404 → probar otro modelo. Sin contenido → reintentable.
-    const retryable =
-      status === 429 || status === 500 || status === 502 || status === 503 || status === 404 || !content;
-    return { ok: false, retryable, error: `OpenRouter ${status}: ${data?.error?.message ?? 'sin contenido'}` };
+    return { ok: false, retryable: true, error: `OpenRouter ${res.status}: ${data?.error?.message ?? 'sin contenido'}` };
   } catch (err) {
-    return { ok: false, retryable: true, error: `OpenRouter red: ${(err as Error).message}` };
+    return { ok: false, retryable: true, error: `OpenRouter: ${(err as Error).message}` };
   }
 }
 
@@ -158,7 +154,6 @@ async function getAIConfig(): Promise<AIConfig> {
   };
 }
 
-/** Prompt MUY corto para minimizar el consumo de tokens. */
 function buildPrompt(symbol: string, ctx: MarketContext): string {
   const t = ctx.ticker;
   const mxn = ctx.balances.find((b) => b.currency === 'mxn');
@@ -173,8 +168,7 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
 }
 
 function extractJson(text: string): any {
-  let t = text.trim();
-  t = t.replace(/```(?:json)?/gi, '').trim();
+  let t = text.trim().replace(/```(?:json)?/gi, '').trim();
   try {
     return JSON.parse(t);
   } catch {}
@@ -189,9 +183,7 @@ function extractJson(text: string): any {
 
 function parseSignal(symbol: string, text: string, tokensUsed: number, latencyMs: number, provider: string): MarketSignal {
   const parsed = extractJson(text);
-  const action: MarketSignal['action'] = ['BUY', 'SELL', 'HOLD'].includes(parsed.action)
-    ? parsed.action
-    : 'HOLD';
+  const action: MarketSignal['action'] = ['BUY', 'SELL', 'HOLD'].includes(parsed.action) ? parsed.action : 'HOLD';
   const confidence = Math.min(1, Math.max(0, Number(parsed.confidence) || 0));
   return {
     symbol,
@@ -224,45 +216,54 @@ function interleave(list: Attempt[]): Attempt[] {
 }
 
 /**
- * Genera una señal intercalando Gemini y OpenRouter, con reintentos y respaldo.
- * La rotación reparte la carga entre proveedores.
+ * Genera una señal intercalando Gemini y OpenRouter, con presupuesto de tiempo.
+ * Si tarda demasiado o todos fallan, devuelve HOLD (nunca bloquea la pasada).
  */
 export async function generateSignal(symbol: string, ctx: MarketContext): Promise<MarketSignal> {
-  const cfg = await getAIConfig();
-  const attempts: Attempt[] = [];
-
-  if (cfg.gemini.apiKey) {
-    for (const m of uniq([cfg.gemini.model, ...GEMINI_FALLBACKS])) {
-      attempts.push({ provider: 'gemini', model: m, key: cfg.gemini.apiKey, run: callGemini });
+  const work = (async (): Promise<MarketSignal> => {
+    const cfg = await getAIConfig();
+    const attempts: Attempt[] = [];
+    if (cfg.gemini.apiKey) {
+      for (const m of uniq([cfg.gemini.model, ...GEMINI_FALLBACKS]).slice(0, MAX_PER_PROVIDER)) {
+        attempts.push({ provider: 'gemini', model: m, key: cfg.gemini.apiKey, run: callGemini });
+      }
     }
-  }
-  if (cfg.openrouter.apiKey) {
-    for (const m of uniq([cfg.openrouter.model, ...OPENROUTER_FALLBACKS])) {
-      attempts.push({ provider: 'openrouter', model: m, key: cfg.openrouter.apiKey, run: callOpenRouter });
+    if (cfg.openrouter.apiKey) {
+      for (const m of uniq([cfg.openrouter.model, ...OPENROUTER_FALLBACKS]).slice(0, MAX_PER_PROVIDER)) {
+        attempts.push({ provider: 'openrouter', model: m, key: cfg.openrouter.apiKey, run: callOpenRouter });
+      }
     }
-  }
+    if (!attempts.length) throw new Error('IA no configurada (Gemini u OpenRouter)');
 
-  if (!attempts.length) throw new Error('IA no configurada (Gemini u OpenRouter)');
+    const interleaved = interleave(attempts);
+    let offset = 0;
+    try {
+      const n = await redis.incr('ai:rotation');
+      offset = n % interleaved.length;
+    } catch {}
+    const ordered = [...interleaved.slice(offset), ...interleaved.slice(0, offset)];
 
-  const interleaved = interleave(attempts);
-  let offset = 0;
-  try {
-    const n = await redis.incr('ai:rotation');
-    offset = n % interleaved.length;
-  } catch {}
-  const ordered = [...interleaved.slice(offset), ...interleaved.slice(0, offset)];
-
-  const prompt = buildPrompt(symbol, ctx);
-  let lastError = 'IA no disponible';
-
-  for (let round = 1; round <= 2; round++) {
+    const prompt = buildPrompt(symbol, ctx);
+    const errors: string[] = [];
     for (const a of ordered) {
       const r = await a.run(a.model, a.key, prompt);
       if (r.ok) return parseSignal(symbol, r.text, r.tokens, r.latencyMs, a.provider);
-      lastError = `${a.provider}(${a.model}): ${r.error}`;
+      errors.push(`${a.provider}:${r.error}`);
     }
-    if (round < 2) await sleep(1200);
-  }
+    throw new Error(errors.join(' | '));
+  })();
 
-  throw new Error(lastError);
+  const timeout = new Promise<MarketSignal>((resolve) =>
+    setTimeout(
+      () => resolve({ symbol, action: 'HOLD', confidence: 0, reasoning: 'IA lenta (timeout)', tokensUsed: 0, latencyMs: SIGNAL_BUDGET }),
+      SIGNAL_BUDGET,
+    ),
+  );
+
+  try {
+    return await Promise.race([work, timeout]);
+  } catch (err) {
+    // Todos los proveedores fallaron → HOLD (no rompe la pasada)
+    return { symbol, action: 'HOLD', confidence: 0, reasoning: `sin IA: ${(err as Error).message.slice(0, 40)}`, tokensUsed: 0, latencyMs: 0 };
+  }
 }

@@ -98,12 +98,18 @@ async function queueLoop(): Promise<void> {
 async function scheduler(): Promise<void> {
   console.log('[worker] Programador iniciado');
   while (true) {
+    console.log('[worker] prog: leyendo intervalo...');
     let interval = config.botIntervalMs;
     try {
       interval = await getIntervalMs();
-    } catch {}
+    } catch (e) {
+      console.error('[worker] prog: error getIntervalMs:', (e as Error).message);
+    }
+    console.log('[worker] prog: intervalo =', interval);
     await redis.set('bot:intervalMs', String(interval)).catch(() => {});
+    console.log('[worker] prog: redis.set ok');
     await heartbeat().catch(() => {});
+    console.log('[worker] prog: heartbeat ok');
     touchHeartbeatFile();
 
     const elapsed = lastPassStart ? Date.now() - lastPassStart : interval;
@@ -133,28 +139,16 @@ async function watchdog(): Promise<void> {
 async function start(): Promise<void> {
   console.log(`[worker] HappyTrading worker arrancando. Intervalo base: ${config.botIntervalMs}ms`);
   try {
-    await redis.set('bot:intervalMs', String(await getIntervalMs()));
+    await redis.set('bot:intervalMs', String(await getIntervalMs().catch(() => config.botIntervalMs)));
   } catch {}
   touchHeartbeatFile();
 
-  // Pasada inicial con reintentos mientras la API crea el esquema.
-  running = true;
-  lastPassStart = Date.now();
-  for (let i = 0; i < 30; i++) {
-    try {
-      await tick();
-      break;
-    } catch (err) {
-      console.log('[worker] BD no lista, reintentando...', (err as Error).message);
-      await sleep(5000);
-    }
-  }
-  running = false;
-  touchHeartbeatFile();
-
+  // Arranca los bucles PRIMERO (no dependen de la pasada inicial).
   queueLoop();
   scheduler();
   watchdog();
+  // Pasada inicial en segundo plano (no bloquea el programador).
+  safeTick('inicial');
 }
 
 start();
