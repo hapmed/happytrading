@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { config } from './config.js';
 import { prisma } from './lib/prisma.js';
 import { runBotForUser } from './services/bot.js';
+import { runExecutorAll } from './services/executor.js';
 import { redis } from './lib/redis.js';
 import { heartbeat } from './lib/activity.js';
 
@@ -136,6 +137,19 @@ async function watchdog(): Promise<void> {
   }
 }
 
+/** EJECUTOR "tonto" (sin IA): corre seguido y cumple el plan de la IA. */
+async function execLoop(): Promise<void> {
+  console.log(`[worker] Ejecutor (sin IA) iniciado · cada ${config.execIntervalMs}ms`);
+  while (true) {
+    try {
+      await runExecutorAll();
+    } catch (err) {
+      console.error('[worker] exec error:', (err as Error).message);
+    }
+    await sleep(config.execIntervalMs);
+  }
+}
+
 async function start(): Promise<void> {
   console.log(`[worker] HappyTrading worker arrancando. Intervalo base: ${config.botIntervalMs}ms`);
   try {
@@ -147,6 +161,7 @@ async function start(): Promise<void> {
   queueLoop();
   scheduler();
   watchdog();
+  execLoop();
   // Pasada inicial en segundo plano (no bloquea el programador).
   safeTick('inicial');
 }

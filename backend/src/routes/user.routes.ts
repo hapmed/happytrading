@@ -118,8 +118,7 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   // Mis posiciones con PnL no realizado (memoria de operaciones)
-  app.get('/positions', { preHandler: [authenticate] }, async (req) => {
-    const positions = await prisma.position.findMany({
+  app.get('/positions', { preHandler: [authenticate] }, async (req) => {    const positions = await prisma.position.findMany({
       where: { userId: req.user.sub },
       orderBy: { updatedAt: 'desc' },
     });
@@ -137,6 +136,15 @@ export async function userRoutes(app: FastifyInstance) {
         const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
         return { symbol: p.symbol, baseAmount: qty, avgCostMxn: avg, priceMxn: price, valueMxn, pnl, pnlPct };
       });
+  });
+
+  // Instrucciones/plan que la IA dejó para el worker (sin IA)
+  app.get('/instructions', { preHandler: [authenticate] }, async (req) => {
+    return prisma.instruction.findMany({
+      where: { userId: req.user.sub },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    });
   });
 
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)

@@ -10,6 +10,9 @@ export interface MarketSignal {
   tokensUsed: number;
   latencyMs: number;
   provider?: string;
+  entryPrice?: number;
+  takeProfitPrice?: number;
+  stopLossPrice?: number;
 }
 
 export interface MarketContext {
@@ -173,7 +176,8 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
     ctx.aggressive
       ? `Estrategia agresiva: favorece operar (BUY si hay momentum alcista; SELL si ya tienes y hay ganancia o el impulso se agota).`
       : `Si tienes el activo y conviene vender (o tomar ganancia / cortar pérdida) responde SELL.`,
-    `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=40 chars"}`,
+    `Incluye niveles numéricos: "entry" (precio de compra), "takeProfit" y "stopLoss".`,
+    `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=40 chars","entry":0,"takeProfit":0,"stopLoss":0}`,
   ].join(' ');
 }
 
@@ -203,6 +207,9 @@ function parseSignal(symbol: string, text: string, tokensUsed: number, latencyMs
     tokensUsed,
     latencyMs,
     provider,
+    entryPrice: Number(parsed.entry) > 0 ? Number(parsed.entry) : 0,
+    takeProfitPrice: Number(parsed.takeProfit) > 0 ? Number(parsed.takeProfit) : 0,
+    stopLossPrice: Number(parsed.stopLoss) > 0 ? Number(parsed.stopLoss) : 0,
   };
 }
 

@@ -8,6 +8,7 @@ import Portfolio from '../components/Portfolio';
 import AutoStatus from '../components/AutoStatus';
 import RegimeGauge from '../components/RegimeGauge';
 import Positions from '../components/Positions';
+import Instructions from '../components/Instructions';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -52,6 +53,7 @@ export default function Dashboard() {
       <Portfolio />
       <RegimeGauge />
       <Positions />
+      <Instructions />
       <BotActivity />
 
       {!user?.hasBitso && (

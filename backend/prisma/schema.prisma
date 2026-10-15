@@ -51,6 +51,7 @@ model User {
   snapshots     BalanceSnapshot[]
   portfolio     PortfolioSnapshot[]
   positions     Position[]
+  instructions  Instruction[]
 
   @@map("users")
 }
@@ -153,4 +154,25 @@ model Position {
 
   @@unique([userId, symbol])
   @@map("positions")
+}
+
+model Instruction {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol       String
+  side         String // BUY | SELL
+  trigger      String // 'price_below' | 'price_above' | 'immediate'
+  triggerPrice Decimal   @db.Decimal(18, 8)
+  amountMxn    Decimal?  @db.Decimal(18, 8) // para BUY (gasto en MXN)
+  quantity     Decimal?  @db.Decimal(18, 8) // para SELL (cantidad del activo)
+  reason       String?
+  status       String    @default("PENDING") // PENDING | EXECUTED | EXPIRED | CANCELLED
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  executedAt   DateTime?
+  tradeId      String?
+
+  @@index([userId, status])
+  @@map("instructions")
 }

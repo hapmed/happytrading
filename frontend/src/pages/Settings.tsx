@@ -177,6 +177,27 @@ export default function Settings() {
               placeholder="ej. 30  (no gastar todo el MXN)"
             />
           </Field>
+          <div className="field">
+            <span className="field-label">PERFIL DE ESTRATEGIA</span>
+            <div className="row" style={{ marginBottom: 8 }}>
+              <PixelButton variant={user?.profile === 'conservative' ? 'primary' : ''} onClick={() => updatePref({ profile: 'conservative' })}>
+                CONSERVADOR
+              </PixelButton>
+              <PixelButton variant={user?.profile === 'balanced' ? 'primary' : ''} onClick={() => updatePref({ profile: 'balanced' })}>
+                EQUILIBRADO
+              </PixelButton>
+              <PixelButton variant={user?.profile === 'aggressive' ? 'primary' : ''} onClick={() => updatePref({ profile: 'aggressive' })}>
+                AGRESIVO 🔥
+              </PixelButton>
+            </div>
+            <small className="muted">
+              {user?.profile === 'aggressive'
+                ? 'AGRESIVO: 8 pares, umbral 50%, busca más ganancia (más riesgo).'
+                : user?.profile === 'conservative'
+                  ? 'CONSERVADOR: 2 pares, umbral 70% (más seguro).'
+                  : 'EQUILIBRADO: 5 pares, umbral 60%.'}
+            </small>
+          </div>
         </div>
       </Panel>
     </div>

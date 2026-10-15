@@ -17,6 +17,7 @@ export interface User {
   initialCapital: string | null;
   riskPct: string | null;
   cashReservePct: string | null;
+  profile: string;
 }
 
 interface AuthCtx {
