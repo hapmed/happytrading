@@ -95,6 +95,11 @@ export async function runBotForUser(userId: string): Promise<void> {
   }
   await logEvent(userId, `Saldo leído · ${balances.length} monedas`, 'info');
 
+  const prevMxnSnap = await prisma.balanceSnapshot.findFirst({
+    where: { userId, currency: 'mxn' },
+    orderBy: { capturedAt: 'desc' },
+  });
+
   for (const b of balances) {
     await prisma.balanceSnapshot.create({
       data: {
@@ -121,6 +126,33 @@ export async function runBotForUser(userId: string): Promise<void> {
 
   const mxn = balances.find((b) => String(b.currency).toLowerCase() === 'mxn');
   const mxnAvailable = Number(mxn?.available ?? '0');
+
+  // Detección de depósitos/retiros por transferencia (por diferencia de saldo MXN,
+  // descontando las operaciones del propio bot) → NO se cuentan como ganancia.
+  if (prevMxnSnap) {
+    try {
+      const tradesSince = await prisma.trade.findMany({
+        where: { userId, createdAt: { gt: prevMxnSnap.capturedAt } },
+      });
+      const netTradeMxn = tradesSince.reduce(
+        (s, t) => s + (t.side === 'SELL' ? Number(t.amount) * Number(t.price) : -Number(t.amount)),
+        0,
+      );
+      const delta = mxnAvailable - Number(prevMxnSnap.available);
+      const net = delta - netTradeMxn;
+      if (net > 5) {
+        await prisma.deposit.create({
+          data: { userId, currency: 'mxn', amount: String(Math.round(net * 100) / 100), kind: 'DEPOSIT', note: 'transferencia detectada' },
+        });
+        await logEvent(userId, `💰 Depósito detectado: $${net.toFixed(2)} MXN (no cuenta como ganancia)`, 'ok');
+      } else if (net < -5) {
+        await prisma.deposit.create({
+          data: { userId, currency: 'mxn', amount: String(Math.round(-net * 100) / 100), kind: 'WITHDRAWAL', note: 'retiro detectado' },
+        });
+        await logEvent(userId, `📤 Retiro detectado: $${(-net).toFixed(2)} MXN`, 'warn');
+      }
+    } catch {}
+  }
 
   const maxOrder = user.maxOrderAmount ? Number(user.maxOrderAmount) : DEFAULT_ORDER_MXN;
   const riskPct = user.riskPct ? Number(user.riskPct) : 1;

@@ -55,6 +55,7 @@ model User {
   portfolio     PortfolioSnapshot[]
   positions     Position[]
   instructions  Instruction[]
+  deposits      Deposit[]
 
   @@map("users")
 }
@@ -178,4 +179,18 @@ model Instruction {
 
   @@index([userId, status])
   @@map("instructions")
+}
+
+model Deposit {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency   String
+  amount     Decimal  @db.Decimal(18, 2)
+  kind       String   @default("DEPOSIT") // DEPOSIT | WITHDRAWAL
+  note       String?
+  detectedAt DateTime @default(now())
+
+  @@index([userId, detectedAt])
+  @@map("deposits")
 }

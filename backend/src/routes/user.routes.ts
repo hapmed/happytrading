@@ -150,29 +150,24 @@ export async function userRoutes(app: FastifyInstance) {
     });
   });
 
-  // Diagnóstico: depósitos/retiros crudos de Bitso
-  app.get('/deposits-raw', { preHandler: [authenticate] }, async (req, reply) => {
-    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) return reply.code(400).send({ error: 'Bitso no conectado' });
-    const client = new BitsoClient({ apiKey: decrypt(user.bitsoApiKey), apiSecret: decrypt(user.bitsoApiSecret) });
-    const out: any = {};
-    try {
-      out.deposits = await client.deposits(20);
-    } catch (e: any) {
-      out.depositsError = e.message;
-    }
-    try {
-      out.withdrawals = await client.withdrawals(20);
-    } catch (e: any) {
-      out.withdrawalsError = e.message;
-    }
-    return out;
+  // Depósitos/retiros detectados (no cuentan como ganancia)
+  app.get('/deposits', { preHandler: [authenticate] }, async (req) => {
+    return prisma.deposit.findMany({
+      where: { userId: req.user.sub },
+      orderBy: { detectedAt: 'desc' },
+      take: 50,
+    });
   });
 
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    const invested = user?.initialCapital ? Number(user.initialCapital) : 0;
+    const deps = await prisma.deposit.findMany({ where: { userId: req.user.sub } });
+    const netDeposits = deps.reduce(
+      (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
+      0,
+    );
+    const invested = (user?.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
 
     let live: any = null;
     try {
@@ -201,6 +196,7 @@ export async function userRoutes(app: FastifyInstance) {
 
     return {
       invested,
+      netDeposits,
       currentValue,
       pnl,
       pnlPct,

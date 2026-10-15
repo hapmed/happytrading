@@ -144,6 +144,10 @@ export default function Portfolio() {
           <Stat label="INVERTIDO" value={`$${fmt(aInv)}`} accent="yellow" />
           <Stat label="VALOR ACTUAL" value={`$${fmt(aCur)}`} accent="cyan" />
           <Stat label={gain ? 'GANANCIA' : 'PÉRDIDA'} value={`$${fmt(Math.abs(pnl))}`} accent={gain ? 'green' : 'magenta'} />
+          <Stat label="DEPÓSITOS" value={`$${fmt(Number(data?.netDeposits ?? 0))}`} accent="yellow" />
+        </div>
+        <div className="muted center" style={{ marginTop: 8, fontSize: 15 }}>
+          Los <b>depósitos por transferencia</b> no cuentan como ganancia.
         </div>
 
         {!hasData && (
