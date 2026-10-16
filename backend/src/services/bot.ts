@@ -414,9 +414,9 @@ async function planForUser(userId: string): Promise<void> {
     const funding = await (client as any).fundingBalance?.();
     const fundingMxn = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
     const pendingMxn = vaultMxn - fundingMxn; // lo que falta por pasar a MXN
-    if (pendingMxn >= 36 && quote !== 'mxn' && cashAvailable >= 2) {
+    if (pendingMxn >= 10 && quote !== 'mxn' && cashAvailable >= 0.5) {
       const fromAmount = Math.min(Number((pendingMxn / quoteToMxn).toFixed(2)), Number(cashAvailable.toFixed(2)));
-      if (fromAmount >= 2) {
+      if (fromAmount >= 0.5) {
         await (client as any).convert(quote.toUpperCase(), 'MXN', fromAmount);
         await new Promise((r) => setTimeout(r, 2500));
         const sp = await (client as any).spotBalance?.();
@@ -448,10 +448,10 @@ async function planForUser(userId: string): Promise<void> {
             const funding = await (client as any).fundingBalance?.();
             mxnVault = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
           } catch {}
-          if (mxnVault < 50 && quote !== 'mxn' && cashAvailable >= 2) {
+          if (mxnVault < 50 && quote !== 'mxn' && cashAvailable >= 0.5) {
             try {
               const needQuote = Math.min(profitReserve, cashAvailable);
-              if (needQuote >= 2) {
+              if (needQuote >= 0.5) {
                 await (client as any).convert(quote.toUpperCase(), 'MXN', Number(needQuote.toFixed(2)));
                 await new Promise((r) => setTimeout(r, 2500));
                 const sp = await (client as any).spotBalance?.();
