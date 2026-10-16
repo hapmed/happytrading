@@ -92,12 +92,15 @@ async function resolveSymbols(
   const def = (SYMBOLS[profile] ?? SYMBOLS.balanced)
     .map((s) => s.replace('_mxn', `_${quote}`))
     .filter((s) => !s.startsWith(`${quote}_`));
+  // Pares de mínimo bajo (1 USDT) y alta volatilidad: permiten operar con poco capital.
+  const MICRO = ['doge', 'pepe', 'shib', 'floki', 'bonk', 'wif', 'bome', 'pengu', 'trump', 'neiro', 'turbo', 'act', 'pnut'];
+  const microList = quote === 'usdt' ? MICRO.map((m) => `${m}_usdt`).filter((s) => !books.length || validSet.has(s)) : [];
 
   let base: string[];
   if (c === 'auto') {
     // 'auto' usa TODOS los pares, pero si son demasiados (Binance tiene cientos)
-    // usamos la lista del perfil para no saturar la API.
-    base = qBooks.length && qBooks.length <= 60 ? qBooks : def;
+    // usamos la lista del perfil + las memecoins de mínimo bajo (para poco capital).
+    base = qBooks.length && qBooks.length <= 60 ? qBooks : [...def, ...microList];
   } else if (c) {
     base = c.split(',').map((s) => s.trim()).filter(Boolean);
     // Solo pares válidos contra la moneda de cotización (MXN o USDT).
