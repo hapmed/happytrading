@@ -32,8 +32,8 @@ async function applyPosition(
     const tp = levels?.tp && levels.tp > 0 ? String(levels.tp) : existing?.tpPriceMxn ?? null;
     await prisma.position.upsert({
       where: key,
-      update: { baseAmount: String(newQty), avgCostMxn: String(newAvg), slPriceMxn: sl, tpPriceMxn: tp },
-      create: { userId, symbol, baseAmount: String(newQty), avgCostMxn: String(newAvg), slPriceMxn: sl, tpPriceMxn: tp },
+      update: { baseAmount: String(newQty), avgCostMxn: String(newAvg), slPriceMxn: sl, tpPriceMxn: tp, peakPrice: String(newAvg) },
+      create: { userId, symbol, baseAmount: String(newQty), avgCostMxn: String(newAvg), slPriceMxn: sl, tpPriceMxn: tp, peakPrice: String(newAvg) },
     });
   } else if (existing) {
     await prisma.position.update({ where: key, data: { baseAmount: String(Math.max(0, Number(existing.baseAmount) - qty)) } });
@@ -379,9 +379,25 @@ export async function runExecutorAll(): Promise<void> {
     if (price <= 0) continue;
     const avg = Number(pos.avgCostMxn);
     const changePct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
+
+    // ── Trailing take-profit: persigue el pico y vende si retrocede, así la
+    //    ganancia que "aparece y luego se esfuma" se cobra antes de perderse.
+    let peak = pos.peakPrice ? Number(pos.peakPrice) : avg;
+    if (price > peak) {
+      peak = price;
+      await prisma.position.update({ where: { id: pos.id }, data: { peakPrice: String(peak) } }).catch(() => {});
+    }
+    const peakPct = avg > 0 ? ((peak - avg) / avg) * 100 : 0;
+    // Activa el trailing solo cuando el pico supera el costo de comisión (~0.35%)
+    // y vende a 0.1% del pico → nunca deja la ganancia por debajo de las comisiones.
+    const trailActivate = tpPct > 0 ? Math.max(0.35, tpPct * 0.7) : 0;
+    const trailDist = tpPct > 0 ? Math.max(0.1, tpPct * 0.2) : 0;
+    const hitTrail = tpPct > 0 && peakPct >= trailActivate && changePct <= peakPct - trailDist;
+
     // Prioriza los niveles por operación (de la IA); si no hay, usa los % del usuario.
     const hitSL = slPrice > 0 ? price <= slPrice : slPct > 0 && changePct <= -slPct;
-    const hitTP = tpPrice > 0 ? price >= tpPrice : tpPct > 0 && changePct >= tpPct;
+    const hitTPfix = tpPrice > 0 ? price >= tpPrice : tpPct > 0 && changePct >= tpPct;
+    const hitTP = hitTPfix || hitTrail;
     if (!hitSL && !hitTP) continue;
 
     if (soldKeys.has(`${user.id}:${pos.symbol}`)) continue; // ya se vendió en este ciclo
@@ -395,7 +411,11 @@ export async function runExecutorAll(): Promise<void> {
       continue;
     }
     try {
-      const reason = hitSL ? `Stop-loss ${changePct.toFixed(1)}%` : `Take-profit +${changePct.toFixed(1)}%`;
+      const reason = hitSL
+        ? `Stop-loss ${changePct.toFixed(1)}%`
+        : hitTPfix
+          ? `Take-profit +${changePct.toFixed(1)}%`
+          : `Take-profit trailing +${changePct.toFixed(2)}% (pico +${peakPct.toFixed(2)}%)`;
       await logEvent(user.id, `⚙ Worker: SELL ${pos.symbol} · ${reason}`, 'warn');
       const placed = await client.placeOrder({ book: pos.symbol, side: 'sell', type: 'market', major: roundStr(qty, 8) });
       const trade = await prisma.trade.create({
