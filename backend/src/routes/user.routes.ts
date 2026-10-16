@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, serializeUser } from '../lib/auth.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
+import { randomToken } from '../lib/crypto.js';
 import { BitsoClient } from '../services/bitso.js';
 import { getActivity } from '../lib/activity.js';
 import { kv } from '../lib/kv.js';
@@ -121,6 +122,20 @@ export async function userRoutes(app: FastifyInstance) {
   // Régimen de mercado cripto (adaptado de crypto-regime-analyzer)
   app.get('/regime', { preHandler: [authenticate] }, async () => {
     return getRegime();
+  });
+
+  // Token único para el widget de iOS (Scriptable)
+  app.get('/widget-token', { preHandler: [authenticate] }, async (req) => {
+    let user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (!user?.widgetToken) {
+      user = await prisma.user.update({ where: { id: req.user.sub }, data: { widgetToken: randomToken(24) } });
+    }
+    return { token: user.widgetToken };
+  });
+
+  app.post('/widget-token/rotate', { preHandler: [authenticate] }, async (req) => {
+    const user = await prisma.user.update({ where: { id: req.user.sub }, data: { widgetToken: randomToken(24) } });
+    return { token: user.widgetToken };
   });
 
   // Consumo de IA del día (tokens/peticiones) y límites del free tier

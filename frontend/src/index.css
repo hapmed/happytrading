@@ -790,6 +790,17 @@ a:hover {
 .pnl-up { color: var(--green); font-family: var(--font-pixel); font-size: 10px; }
 .pnl-down { color: var(--red); font-family: var(--font-pixel); font-size: 10px; }
 
+/* ---------- Código de Scriptable ---------- */
+.code-box {
+  height: 340px;
+  font-family: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--green);
+  white-space: pre;
+  resize: vertical;
+}
+
 /* ---------- ¿Cómo funciona? ---------- */
 .how-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
 .how-emoji {

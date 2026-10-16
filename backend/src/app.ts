@@ -10,6 +10,7 @@ import { config } from './config.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { adminRoutes } from './routes/admin.routes.js';
 import { userRoutes } from './routes/user.routes.js';
+import { widgetRoutes } from './routes/widget.routes.js';
 import { ensureDefaults } from './lib/defaults.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +37,7 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(userRoutes, { prefix: '/api/me' });
+  await app.register(widgetRoutes, { prefix: '/api' });
 
   // Sirve el frontend (SPA) desde ./public si existe (modo unificado)
   try {
