@@ -187,7 +187,7 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
     posLine,
     `señales_previas=${recent}`,
     ctx.aggressive
-      ? `Estrategia agresiva: prioriza monedas VOLÁTILES con momentum; BUY si hay impulso alcista, y SELL si ya tienes y hay ganancia o el impulso se agota (para rotar a otra oportunidad).`
+      ? `Estrategia AGRESIVA de SCALPING: prioriza monedas muy VOLÁTILES; compra pequeña y frecuente en el impulso; SELL rápido al primer beneficio o si el impulso se agota (para rotar). Objetivo: muchas compras/ventas pequeñas y rápidas.`
       : `Si tienes el activo y conviene vender (o tomar ganancia / cortar pérdida) responde SELL.`,
     `Incluye niveles numéricos: "entry" (precio de compra), "takeProfit" y "stopLoss".`,
     `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=40 chars","entry":0,"takeProfit":0,"stopLoss":0}`,
