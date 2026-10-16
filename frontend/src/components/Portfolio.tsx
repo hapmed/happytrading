@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Panel, Stat } from './Retro';
 import { pickLine } from '../lib/wolfLines';
+import { sfxChaChing } from '../lib/sfx';
 import Donut from './Donut';
 
 function fmt(n: number) {
@@ -105,6 +106,7 @@ export default function Portfolio() {
     if (prevPnl.current != null && p > prevPnl.current + 0.001) {
       setRain((r) => r + 1);
       setFlash('flash-up');
+      sfxChaChing();
       setTimeout(() => setFlash(''), 1500);
     }
     prevPnl.current = p;

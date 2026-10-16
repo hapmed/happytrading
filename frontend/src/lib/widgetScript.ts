@@ -92,6 +92,10 @@ async function makeLarge(d, gain, wolf, mood) {
   const z = w.addText("Régimen: " + (d.zone || "—")); z.font = Font.systemFont(9); z.textColor = new Color("#7984a6"); z.centerAlignText();
   w.addSpacer(6);
   const ph = w.addText("“" + pick(mood) + "”"); ph.font = Font.systemFont(9); ph.textColor = new Color("#ffe600"); ph.centerAlignText(); ph.lineLimit = 2;
+  if (d.top && d.top.length) {
+    const tp = w.addText("Volátiles: " + d.top.map(function (x) { return x.symbol.split("_")[0].toUpperCase() + " " + Number(x.vol).toFixed(1) + "%"; }).join(" · "));
+    tp.font = Font.systemFont(9); tp.textColor = new Color("#ff8a00"); tp.centerAlignText(); tp.lineLimit = 1; tp.minimumScaleFactor = 0.6;
+  }
   return w;
 }
 

@@ -8,8 +8,45 @@ function time(iso: string) {
     return '';
   }
 }
+function base(s: string) {
+  return String(s).replace('_mxn', '').toUpperCase();
+}
+
+/** Empareja compras→ventas (FIFO) por par para estimar la ganancia de cada ciclo. */
+function roundTrips(trades: any[]) {
+  const chrono = [...trades].reverse();
+  const queues: Record<string, Array<{ qty: number; cost: number }>> = {};
+  const pnl: Record<string, { pnl: number; pct: number }> = {};
+  for (const t of chrono) {
+    const sym = t.symbol;
+    const price = Number(t.price) || 0;
+    if (t.side === 'BUY') {
+      const qty = price > 0 ? Number(t.amount) / price : 0;
+      (queues[sym] ||= []).push({ qty, cost: Number(t.amount) || 0 });
+    } else {
+      let left = Number(t.amount) || 0;
+      const proceeds = left * price;
+      let cost = 0;
+      const q = queues[sym] || [];
+      while (left > 1e-12 && q.length) {
+        const lot = q[0];
+        const take = Math.min(lot.qty, left);
+        const c = lot.qty > 0 ? lot.cost * (take / lot.qty) : 0;
+        cost += c;
+        left -= take;
+        lot.qty -= take;
+        lot.cost -= c;
+        if (lot.qty <= 1e-12) q.shift();
+      }
+      const p = proceeds - cost;
+      pnl[t.id] = { pnl: p, pct: cost > 0 ? (p / cost) * 100 : 0 };
+    }
+  }
+  return pnl;
+}
 
 export default function RecentTrades({ trades }: { trades: any[] }) {
+  const pnl = roundTrips(trades);
   return (
     <Panel title="◈ HISTORIAL · COMPRADOS Y VENDIDOS">
       {trades.length === 0 ? (
@@ -19,12 +56,20 @@ export default function RecentTrades({ trades }: { trades: any[] }) {
           {trades.slice(0, 15).map((t, i) => {
             const isBuy = t.side === 'BUY';
             const value = isBuy ? Number(t.amount) : Number(t.amount) * Number(t.price);
+            const rt = pnl[t.id];
             return (
               <div className={`trade-row ${isBuy ? 'buy' : 'sell'}`} key={t.id} style={{ animationDelay: `${i * 0.05}s` }}>
                 <span className={`badge ${isBuy ? 'buy' : 'sell'}`}>{t.side}</span>
-                <b>{String(t.symbol).replace('_mxn', '').toUpperCase()}</b>
+                <b>{base(t.symbol)}</b>
                 <span className="muted">@ ${Number(t.price).toLocaleString('es-MX', { maximumFractionDigits: 2 })}</span>
-                <span className="trade-val">${value.toFixed(2)}</span>
+                {rt ? (
+                  <span className={rt.pnl >= 0 ? 'pnl-up' : 'pnl-down'}>
+                    {rt.pnl >= 0 ? '+' : '−'}${Math.abs(rt.pnl).toFixed(2)} ({rt.pct >= 0 ? '+' : ''}
+                    {rt.pct.toFixed(1)}%)
+                  </span>
+                ) : (
+                  <span className="trade-val">${value.toFixed(2)}</span>
+                )}
                 <span className="trade-time">{time(t.createdAt)}</span>
               </div>
             );

@@ -2,6 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
+import { BitsoClient } from '../services/bitso.js';
+import { decrypt } from '../lib/crypto.js';
+
+const VOL_CANDIDATES = ['btc_mxn', 'eth_mxn', 'sol_mxn', 'xrp_mxn', 'trx_mxn', 'mana_mxn', 'ltc_mxn'];
 
 /**
  * Endpoint PÚBLICO para el widget de iOS (Scriptable).
@@ -45,6 +49,26 @@ export async function widgetRoutes(app: FastifyInstance) {
     const mood =
       invested > 0.01 && pnl > 0.01 ? 'profit' : invested > 0.01 && pnl < -0.01 ? 'loss' : zone === 'RISK_OFF' ? 'loss' : 'idle';
 
+    // Top 3 monedas más volátiles (para el widget)
+    let top: Array<{ symbol: string; vol: number }> = [];
+    if (user.bitsoApiKey && user.bitsoApiSecret) {
+      try {
+        const client = new BitsoClient({ apiKey: decrypt(user.bitsoApiKey), apiSecret: decrypt(user.bitsoApiSecret) });
+        const vols: Array<{ symbol: string; vol: number }> = [];
+        for (const s of VOL_CANDIDATES) {
+          try {
+            const t = await client.ticker(s);
+            const last = Number(t.last ?? 0);
+            const high = Number(t.high ?? 0);
+            const low = Number(t.low ?? 0);
+            vols.push({ symbol: s, vol: last > 0 ? ((high - low) / last) * 100 : 0 });
+          } catch {}
+        }
+        vols.sort((a, b) => b.vol - a.vol);
+        top = vols.slice(0, 3);
+      } catch {}
+    }
+
     return {
       ok: true,
       invested,
@@ -53,6 +77,7 @@ export async function widgetRoutes(app: FastifyInstance) {
       pnlPct,
       zone,
       mood,
+      top,
       updatedAt: new Date().toISOString(),
     };
   });

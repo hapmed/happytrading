@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
+import { sfxCoin } from '../lib/sfx';
 import { Panel, Stat } from '../components/Retro';
 import BotActivity from '../components/BotActivity';
 import Portfolio from '../components/Portfolio';
@@ -41,6 +42,14 @@ export default function Dashboard() {
 
   const buys = trades.filter((t) => t.side === 'BUY').length;
   const sells = trades.filter((t) => t.side === 'SELL').length;
+
+  const lastTrade = useRef<string | null>(null);
+  useEffect(() => {
+    if (!trades.length) return;
+    const top = trades[0];
+    if (lastTrade.current && top.id !== lastTrade.current && top.side === 'BUY') sfxCoin();
+    lastTrade.current = top.id;
+  }, [trades]);
 
   return (
     <div>
