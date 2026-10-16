@@ -323,14 +323,21 @@ async function planForUser(userId: string): Promise<void> {
     } catch {}
   }
 
-  const tradingEquity = Math.max(0, equityMxn - vaultValue);
-  const cryptoValue = Math.max(0, tradingEquity - cashAvailable);
-  let profitReserve = Math.max(0, tradingEquity - workingCapital);
+  let equityQuote = Math.max(0, equityMxn - vaultValue);
+  if (quote !== 'mxn') {
+    try {
+      const t = await client.ticker(`${quote}_mxn`);
+      const p = Number(t.last ?? 0);
+      if (p > 0) equityQuote = equityQuote / p;
+    } catch {}
+  }
+  const cryptoValue = Math.max(0, equityQuote - cashAvailable);
+  let profitReserve = Math.max(0, equityQuote - workingCapital);
   if (movements.withdrawn > 0) {
     // Retiro detectado automáticamente → REINICIA la bóveda (vuelve a $0).
     profitReserve = 0;
     await prisma.user
-      .update({ where: { id: userId }, data: { vaultBasePnl: String(tradingEquity - workingCapital) } })
+      .update({ where: { id: userId }, data: { vaultBasePnl: String(equityQuote - workingCapital) } })
       .catch(() => {});
     await logEvent(userId, `🔄 Bóveda reiniciada por retiro detectado ($${movements.withdrawn.toFixed(2)})`, 'ok');
   }
