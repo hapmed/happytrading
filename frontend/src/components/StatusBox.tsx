@@ -25,6 +25,7 @@ export default function StatusBox() {
   const [act, setAct] = useState<any>(null);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
+  const [bitsoWarn, setBitsoWarn] = useState<string | null>(null);
 
   const on = !!user?.autoTrade;
 
@@ -32,6 +33,30 @@ export default function StatusBox() {
     const load = () => api('/me/activity').then(setAct).catch(() => {});
     load();
     const id = setInterval(load, 3000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Aviso de límites de cuenta de Bitso (bloquea operar si el nivel es bajo).
+  useEffect(() => {
+    const check = () =>
+      api('/me/bitso-status')
+        .then((s: any) => {
+          const lvl = Number(s?.verification_level ?? 0);
+          const pending = ['official_id', 'proof_of_residency'].filter((k) =>
+            String(s?.[k] ?? '').toLowerCase().includes('not submitted'),
+          ).length;
+          if (lvl < 2 || pending > 0) {
+            setBitsoWarn(
+              `Bitso limita tu cuenta (nivel ${lvl}${pending ? ' · documentos sin enviar' : ''}). ` +
+                `Para que el bot pueda operar, aumenta tus límites en la app de Bitso: sube tu INE y comprobante de domicilio (Cuenta → Límites → Aumentar).`,
+            );
+          } else {
+            setBitsoWarn(null);
+          }
+        })
+        .catch(() => setBitsoWarn(null));
+    check();
+    const id = setInterval(check, 300000);
     return () => clearInterval(id);
   }, []);
 
@@ -79,6 +104,8 @@ export default function StatusBox() {
       <div className="uptime">
         ⏱ ACTIVO AHORA: <b>{uptime}</b> · TOTAL HISTÓRICO: <b>{totalUptime}</b>
       </div>
+
+      {bitsoWarn && <div className="bitso-warn">⚠ {bitsoWarn}</div>}
 
       <button type="button" className={`auto-banner ${on ? 'on' : 'off'}`} onClick={toggle} disabled={busy} style={{ marginBottom: 0 }}>
         <span className="auto-dot" />

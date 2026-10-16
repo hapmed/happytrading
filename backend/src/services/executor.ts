@@ -36,6 +36,17 @@ const rotateCooldown = new Map<string, number>();
 // Tras un reinicio, las instrucciones que quedaron "en proceso" se recuperan una vez.
 let recoveredProcessing = false;
 
+// Cuando Bitso bloquea por límites de cuenta (código 0507), dejamos de intentar
+// operaciones por un rato para no spamear peticiones (el arreglo es del usuario: subir nivel en Bitso).
+let accountBlockedUntil = 0;
+let accountBlockNoticeAt = 0;
+
+/** ¿El error es un bloqueo por límites de cuenta de Bitso? */
+function isAccountLimitError(err: unknown): boolean {
+  const e = err as any;
+  return e?.bitsoCode === '0507' || /allowed balance|funds protection|exceed your total/i.test(String(e?.message ?? ''));
+}
+
 /**
  * Sin MXN suficiente: VENDE la posición más rentable (o la que alcance) para fondear la compra.
  * Sacrifica la posición actual para no perder una mejor oportunidad (la estrategia siempre busca ganar).
@@ -49,6 +60,7 @@ async function rotateToFund(
 ): Promise<string | null> {
   const lastT = rotateCooldown.get(userId) ?? 0;
   if (Date.now() - lastT < 60_000) return null;
+  if (Date.now() < accountBlockedUntil) return null; // Bitso bloqueado por límites de cuenta
 
   const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 } } });
   const others = positions.filter((p) => p.symbol !== excludeSymbol);
@@ -96,6 +108,17 @@ async function rotateToFund(
     return best.symbol;
   } catch (err) {
     console.error(`[rotateToFund] venta ${best.symbol} falló:`, (err as Error).message);
+    if (isAccountLimitError(err)) {
+      accountBlockedUntil = Date.now() + 10 * 60_000;
+      if (Date.now() - accountBlockNoticeAt > 10 * 60_000) {
+        accountBlockNoticeAt = Date.now();
+        await logEvent(
+          userId,
+          '⛔ Bitso BLOQUEA operar por límites de cuenta (nivel 1). Sube tu verificación en Bitso (INE + comprobante de domicilio) para aumentar límites y que el bot pueda operar.',
+          'error',
+        ).catch(() => {});
+      }
+    }
     return null;
   }
 }
@@ -253,7 +276,19 @@ export async function runExecutorAll(): Promise<void> {
       }
     } catch (err) {
       await release();
-      await logEvent(user.id, `Worker error ${ins.symbol}: ${(err as Error).message.slice(0, 60)}`, 'error');
+      if (isAccountLimitError(err)) {
+        accountBlockedUntil = Date.now() + 10 * 60_000;
+        if (Date.now() - accountBlockNoticeAt > 10 * 60_000) {
+          accountBlockNoticeAt = Date.now();
+          await logEvent(
+            user.id,
+            '⛔ Bitso BLOQUEA operar por límites de cuenta (nivel 1). Sube tu verificación en Bitso (INE + comprobante de domicilio) para aumentar límites.',
+            'error',
+          ).catch(() => {});
+        }
+      } else {
+        await logEvent(user.id, `Worker error ${ins.symbol}: ${(err as Error).message.slice(0, 60)}`, 'error');
+      }
     }
   }
 

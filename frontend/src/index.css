@@ -1522,3 +1522,15 @@ a:hover {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* ── Aviso de límites de cuenta de Bitso ───────────────────────────── */
+.bitso-warn {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--yellow);
+  background: rgba(255, 230, 0, 0.08);
+  color: var(--yellow);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.3;
+}
