@@ -227,15 +227,68 @@ function parseSignal(symbol: string, text: string, tokensUsed: number, latencyMs
 }
 
 interface Attempt {
-  provider: 'gemini' | 'openrouter';
+  provider: string;
   model: string;
   key: string;
   run: (model: string, key: string, prompt: string) => Promise<Res>;
 }
 
+interface CustomProvider {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  models: string[];
+  requestsPerDay?: number;
+  requestsPerMinute?: number;
+}
+
+async function getProviders(): Promise<CustomProvider[]> {
+  try {
+    const s = await prisma.setting.findUnique({ where: { key: 'providers' } });
+    const arr = s?.value as any;
+    return Array.isArray(arr) ? arr.filter((p) => p?.apiKey && p?.baseUrl && p?.name) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Proveedor genérico OpenAI-compatible (Groq, GitHub Models, Mistral, Together, etc.). */
+async function callOpenaiCompat(p: CustomProvider, model: string, prompt: string): Promise<Res> {
+  const url = `${p.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const body = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 400,
+    temperature: 0.2,
+  };
+  const start = Date.now();
+  try {
+    markCall(p.name);
+    const res = await fetchWithTimeout(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${p.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const latencyMs = Date.now() - start;
+    const data: any = await res.json().catch(() => ({}));
+    const content = data?.choices?.[0]?.message?.content;
+    if (res.ok && content) {
+      const tokens = data?.usage?.total_tokens ?? 0;
+      recordUsage(p.name, tokens, true);
+      return { ok: true, text: content, tokens, latencyMs };
+    }
+    recordUsage(p.name, 0, false);
+    if (res.status === 429) setCooldown(p.name, 90_000);
+    return { ok: false, retryable: true, error: `${p.name} ${res.status}: ${data?.error?.message ?? 'sin contenido'}` };
+  } catch (err) {
+    recordUsage(p.name, 0, false);
+    return { ok: false, retryable: true, error: `${p.name}: ${(err as Error).message}` };
+  }
+}
+
 function interleave(list: Attempt[]): Attempt[] {
   const g = list.filter((a) => a.provider === 'gemini');
-  const o = list.filter((a) => a.provider === 'openrouter');
+  const o = list.filter((a) => a.provider !== 'gemini');
   const out: Attempt[] = [];
   const max = Math.max(g.length, o.length);
   for (let i = 0; i < max; i++) {
@@ -263,6 +316,20 @@ export async function generateSignal(symbol: string, ctx: MarketContext): Promis
         attempts.push({ provider: 'openrouter', model: m, key: cfg.openrouter.apiKey, run: callOpenRouter });
       }
     }
+
+    // Proveedores extra OpenAI-compatible (Groq, GitHub Models, Mistral, etc.)
+    for (const p of await getProviders()) {
+      const lim = {
+        requestsPerDay: p.requestsPerDay ?? 500,
+        tokensPerDay: 1_000_000_000,
+        requestsPerMinute: p.requestsPerMinute ?? 6,
+      };
+      if (!(await isProviderAllowed(p.name, lim))) continue;
+      for (const m of uniq(p.models ?? []).slice(0, MAX_PER_PROVIDER)) {
+        attempts.push({ provider: p.name, model: m, key: p.apiKey, run: (mo, _k, pr) => callOpenaiCompat(p, mo, pr) });
+      }
+    }
+
     if (!attempts.length) throw new Error('Sin IA disponible (límites diarios alcanzados o no configurada)');
 
     const interleaved = interleave(attempts);

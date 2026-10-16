@@ -91,10 +91,12 @@ export async function getLimits(): Promise<Limits> {
 }
 
 /** ¿Se puede usar este proveedor sin pasarse del límite diario/minuto ni en enfriamiento? */
-export async function isProviderAllowed(provider: string): Promise<boolean> {
+export async function isProviderAllowed(
+  provider: string,
+  override?: { requestsPerDay: number; tokensPerDay: number; requestsPerMinute: number },
+): Promise<boolean> {
   if (inCooldown(provider)) return false;
-  const limits = (await getLimits()) as any;
-  const l = limits[provider];
+  const l = override ?? ((await getLimits()) as any)[provider];
   if (!l) return true;
   const u = getUsage().providers[provider] ?? { requests: 0, tokens: 0, errors: 0 };
   if (u.requests >= l.requestsPerDay || u.tokens >= l.tokensPerDay) return false;

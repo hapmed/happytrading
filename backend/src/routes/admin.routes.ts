@@ -21,6 +21,19 @@ const settingsSchema = z.object({
   gemini: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   openrouter: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   bot: z.object({ intervalMs: z.number().int().min(30000).optional(), regimeFilter: z.boolean().optional() }).nullable().optional(),
+  providers: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        baseUrl: z.string().min(1),
+        apiKey: z.string().optional().default(''),
+        models: z.array(z.string()),
+        requestsPerDay: z.number().int().min(0).optional(),
+        requestsPerMinute: z.number().int().min(0).optional(),
+      }),
+    )
+    .nullable()
+    .optional(),
   limits: z
     .object({
       gemini: z.object({ requestsPerDay: z.number().int().min(0), tokensPerDay: z.number().int().min(0), requestsPerMinute: z.number().int().min(0).optional() }),
@@ -90,7 +103,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ----- Configuración global -----
   app.get('/settings', { preHandler: [requireAdmin] }, async () => {
-    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'limits'];
+    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'limits', 'providers'];
     const rows = await prisma.setting.findMany({ where: { key: { in: keys } } });
     const out: Record<string, unknown> = {};
     for (const r of rows) out[r.key] = r.value;
@@ -99,6 +112,9 @@ export async function adminRoutes(app: FastifyInstance) {
     if (out.smtp) out.smtp = mask(out.smtp, 'pass');
     if (out.gemini) out.gemini = mask(out.gemini, 'apiKey');
     if (out.openrouter) out.openrouter = mask(out.openrouter, 'apiKey');
+    if (Array.isArray(out.providers)) {
+      out.providers = (out.providers as any[]).map((p) => ({ ...p, apiKey: p.apiKey ? MASK : '' }));
+    }
     if (out.turnstile) out.turnstile = mask(out.turnstile, 'secretKey');
     return out;
   });
@@ -149,6 +165,20 @@ export async function adminRoutes(app: FastifyInstance) {
     }
     if (body.limits !== undefined) {
       await upsert('limits', body.limits);
+    }
+    if (body.providers !== undefined) {
+      let provs: any = body.providers;
+      if (Array.isArray(provs)) {
+        const old = ((map.get('providers') as any[]) ?? []);
+        provs = provs.map((p: any) => {
+          if (p.apiKey === MASK) {
+            const o = old.find((x) => x.name === p.name);
+            return { ...p, apiKey: o?.apiKey ?? '' };
+          }
+          return p;
+        });
+      }
+      await upsert('providers', provs);
     }
     if (body.registration_token !== undefined) {
       await upsert('registration_token', body.registration_token);
