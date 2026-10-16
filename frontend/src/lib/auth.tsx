@@ -11,6 +11,7 @@ export interface User {
   hasBitso: boolean;
   tradingEnabled: boolean;
   autoTrade: boolean;
+  rotate: boolean;
   maxOrderAmount: string | null;
   stopLossPct: string | null;
   takeProfitPct: string | null;

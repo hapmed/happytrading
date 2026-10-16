@@ -25,6 +25,7 @@ const tradingSchema = z.object({
   riskPct: z.number().min(0).optional(),
   cashReservePct: z.number().min(0).max(100).optional(),
   profile: z.enum(['conservative', 'balanced', 'aggressive']).optional(),
+  rotate: z.boolean().optional(),
   symbols: z.string().max(400).optional(),
   dcaLevels: z.number().int().min(1).max(10).optional(),
   dcaStepPct: z.number().min(0).max(50).optional(),

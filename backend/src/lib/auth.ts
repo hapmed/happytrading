@@ -14,6 +14,7 @@ export function serializeUser(user: any) {
     hasBitso: Boolean(user.bitsoApiKey),
     tradingEnabled: user.tradingEnabled,
     autoTrade: user.autoTrade,
+    rotate: user.rotate ?? true,
     maxOrderAmount: user.maxOrderAmount?.toString() ?? null,
     stopLossPct: user.stopLossPct?.toString() ?? null,
     takeProfitPct: user.takeProfitPct?.toString() ?? null,

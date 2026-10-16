@@ -27,6 +27,46 @@ async function clearPending(userId: string, symbol: string): Promise<void> {
 }
 
 /**
+ * ROTACIÓN: vende una posición en hold para fondear una oportunidad de compra.
+ * Prioriza vender la de mayor ganancia (o la más pequeña) que no sea la del par objetivo.
+ */
+async function tryRotate(userId: string, excludeSymbol: string, client: BitsoClient): Promise<number> {
+  const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 } } });
+  const others = positions.filter((p) => p.symbol !== excludeSymbol);
+  if (!others.length) return 0;
+
+  let best: { symbol: string; qty: number; price: number; value: number; pnlPct: number; score: number } | null = null;
+  for (const p of others) {
+    try {
+      const t = await client.ticker(p.symbol);
+      const price = Number(t.last ?? 0);
+      const qty = Number(p.baseAmount);
+      const value = qty * price;
+      if (value <= 0) continue;
+      const avg = Number(p.avgCostMxn);
+      const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
+      const score = pnlPct + (value >= 20 ? 10 : 0);
+      if (!best || score > best.score) best = { symbol: p.symbol, qty, price, value, pnlPct, score };
+    } catch {}
+  }
+  if (!best) return 0;
+
+  await prisma.instruction.create({
+    data: {
+      userId, symbol: best.symbol, side: 'SELL', trigger: 'immediate', triggerPrice: String(best.price),
+      quantity: String(best.qty), reason: `Rotar → ${excludeSymbol}`, status: 'PENDING',
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+    },
+  });
+  await logEvent(
+    userId,
+    `🔄 Rotando: vendo ${best.symbol} (${best.pnlPct >= 0 ? '+' : ''}${best.pnlPct.toFixed(1)}%) para comprar ${excludeSymbol}`,
+    'warn',
+  );
+  return best.value;
+}
+
+/**
  * Lista de pares a operar:
  *  - "auto"        → todos los pares contra MXN que ofrece Bitso
  *  - "a,b,c"       → lista personalizada
@@ -161,6 +201,7 @@ export async function runBotForUser(userId: string): Promise<void> {
 
   const profile = user.profile ?? 'balanced';
   const minConf = MIN_CONF[profile] ?? 0.6;
+  const rotate = user.rotate !== false;
   const dcaLevels = user.dcaLevels ? Math.max(1, Math.min(10, user.dcaLevels)) : 3;
   const dcaStepPct = user.dcaStepPct ? Number(user.dcaStepPct) : 2;
   const heldCurrencies = balances
@@ -267,7 +308,7 @@ export async function runBotForUser(userId: string): Promise<void> {
         const spendable = Math.max(0, mxnAvailable - reserveMxn);
         let size = stopLossPct > 0 ? fixedFractionalSize(equityMxn, riskPct, stopLossPct) : maxOrder;
         if (!isFinite(size) || size <= 0) size = maxOrder;
-        const spend = Math.min(maxOrder, size, spendable);
+        let spend = Math.min(maxOrder, size, spendable);
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
 
         // Respetar mínimos de Bitso (monto y valor por orden) antes de crear el plan
@@ -275,12 +316,14 @@ export async function runBotForUser(userId: string): Promise<void> {
         const minValue = lim?.minimumValue ?? 0;
         const minAmount = lim?.minimumAmount ?? 0;
         const minPerTranche = Math.max(minValue, minAmount * entry);
+
+        // Si no alcanza el efectivo, ROTA: vende una posición en hold para fondear esta oportunidad.
+        if (spend < Math.max(1, minPerTranche) && rotate) {
+          const freedValue = await tryRotate(userId, symbol, client);
+          if (freedValue > 0) spend = Math.min(maxOrder, freedValue);
+        }
         if (spend < Math.max(1, minPerTranche)) {
-          await logEvent(
-            userId,
-            `Monto $${spend.toFixed(2)} bajo el mínimo de ${symbol} ($${minPerTranche.toFixed(2)})`,
-            'warn',
-          );
+          await logEvent(userId, `Sin efectivo ni posiciones para rotar · ${symbol}`, 'warn');
           continue;
         }
         let levels = dcaLevels;

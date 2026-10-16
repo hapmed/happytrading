@@ -105,6 +105,14 @@ export default function Settings() {
             checked={user?.tradingEnabled}
             onChange={(v: boolean) => updatePref({ tradingEnabled: v })}
           />
+          <Toggle
+            label={`ROTAR POSICIONES: ${user?.rotate ? 'ON' : 'OFF'}`}
+            checked={user?.rotate}
+            onChange={(v: boolean) => updatePref({ rotate: v })}
+          />
+          <p className="muted mb" style={{ fontSize: 16 }}>
+            Con ROTAR ON, si ve una gran oportunidad y no hay efectivo, <b>vende lo que tengas en hold</b> para comprarla (ganancias más rápidas, más riesgo).
+          </p>
           <Field
             label="MONTO MÁXIMO POR ORDEN (MXN)"
             help="Tope de dinero por cada compra. El bot nunca gastará más que esto en una sola orden."

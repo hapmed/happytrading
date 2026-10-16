@@ -35,6 +35,7 @@ model User {
   // Preferencias de trading
   tradingEnabled Boolean    @default(true)
   autoTrade      Boolean    @default(true)
+  rotate         Boolean    @default(true)
   maxOrderAmount Decimal?   @db.Decimal(18, 8)
   stopLossPct    Decimal?   @db.Decimal(6, 3)
   takeProfitPct  Decimal?   @db.Decimal(6, 3)
