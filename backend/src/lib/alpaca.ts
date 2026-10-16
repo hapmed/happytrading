@@ -37,8 +37,9 @@ export const alpaca = {
   account: (c: AlpacaCreds) => req<any>(c, '/v2/account'),
   positions: (c: AlpacaCreds) => req<any[]>(c, '/v2/positions'),
   clock: (c: AlpacaCreds) => req<any>(c, '/v2/clock'),
-  /** Dirección para fondear con cripto (stablecoins). */
-  wallets: (c: AlpacaCreds, asset = 'USDC') => req<any>(c, `/v2/wallets?asset=${asset}`),
+  /** Dirección para fondear con cripto (stablecoins). chain: 'SOL' | 'ethereum' (por defecto). */
+  wallets: (c: AlpacaCreds, asset = 'USDC', chain?: string) =>
+    req<any>(c, `/v2/wallets?asset=${asset}${chain ? `&chain=${chain}` : ''}`),
   orders: (c: AlpacaCreds, status = 'all', limit = 25) =>
     req<any[]>(c, `/v2/orders?status=${status}&limit=${limit}&direction=desc`),
   asset: (c: AlpacaCreds, symbol: string) => req<any>(c, `/v2/assets/${encodeURIComponent(symbol)}`),

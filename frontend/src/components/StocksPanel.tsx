@@ -45,16 +45,23 @@ export default function StocksPanel() {
 
       {bp <= 0 && (
         <div className="bitso-warn">
-          ⚠ Tu cuenta Alpaca está en <b>{d.live ? 'LIVE (dinero real)' : 'Paper'}</b> pero con <b>$0</b>.{' '}
-          {d.depositAddress ? (
-            <>
-              Fóndela enviando <b>{d.depositAsset}</b> a esta dirección (red <b>Ethereum / ERC-20</b>):
-              <div className="payout-clabe" style={{ fontSize: 15, wordBreak: 'break-all' }}>
-                {d.depositAddress}
+          ⚠ Tu cuenta Alpaca está en <b>{d.live ? 'LIVE (dinero real)' : 'Paper'}</b> pero con <b>$0</b>. Fóndela
+          enviando <b>{d.deposit?.asset}</b> a una de estas direcciones:
+          {d.deposit?.solana && (
+            <div style={{ marginTop: 6 }}>
+              <b>Solana</b> (comisión ~$0.01) · red <b>Solana</b>:
+              <div className="payout-clabe" style={{ fontSize: 14, wordBreak: 'break-all' }}>
+                {d.deposit.solana}
               </div>
-            </>
-          ) : (
-            'Fóndela en USD para operar.'
+            </div>
+          )}
+          {d.deposit?.ethereum && (
+            <div style={{ marginTop: 6 }}>
+              <b>Ethereum</b> (comisión cara ~$5-20) · red <b>ERC-20</b>:
+              <div className="payout-clabe" style={{ fontSize: 14, wordBreak: 'break-all' }}>
+                {d.deposit.ethereum}
+              </div>
+            </div>
           )}
         </div>
       )}

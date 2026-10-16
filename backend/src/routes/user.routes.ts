@@ -352,16 +352,20 @@ export async function userRoutes(app: FastifyInstance) {
       baseUrl: String(v.baseUrl || 'https://api.alpaca.markets'),
     };
     try {
-      const [account, positions, clock, wallet] = await Promise.all([
+      const [account, positions, clock, wSol, wEth] = await Promise.all([
         alpaca.account(creds),
         alpaca.positions(creds).catch(() => []),
         alpaca.clock(creds).catch(() => null),
+        alpaca.wallets(creds, 'USDC', 'SOL').catch(() => null),
         alpaca.wallets(creds, 'USDC').catch(() => null),
       ]);
       return {
         live: creds.baseUrl.includes('api.alpaca.markets'),
-        depositAddress: wallet?.address ?? null,
-        depositAsset: 'USDC / USDT',
+        deposit: {
+          solana: wSol?.address ?? null,
+          ethereum: wEth?.address ?? null,
+          asset: 'USDC / USDT',
+        },
         account: {
           status: account?.status,
           currency: account?.currency,
