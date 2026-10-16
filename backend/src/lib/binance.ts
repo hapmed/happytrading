@@ -225,6 +225,24 @@ export class BinanceClient {
     return this.request<any[]>('GET', '/sapi/v1/fiat/orders', { transactionType: 1, rows: 50 }, true);
   }
 
+  /** Movimientos FIAT (MXN/SPEI): depósitos y retiros, para no contarlos como ganancia. */
+  async fiatMovements(): Promise<Array<{ wid: string; status: string; created_at: string; currency: string; amount: string; kind: 'DEPOSIT' | 'WITHDRAWAL' }>> {
+    const [deps, wds] = await Promise.all([
+      this.request<any>('GET', '/sapi/v1/fiat/orders', { transactionType: 0, rows: 50 }, true).catch(() => ({ data: [] })),
+      this.request<any>('GET', '/sapi/v1/fiat/orders', { transactionType: 1, rows: 50 }, true).catch(() => ({ data: [] })),
+    ]);
+    const map = (arr: any[], kind: 'DEPOSIT' | 'WITHDRAWAL') =>
+      (arr ?? []).map((x: any) => ({
+        wid: String(x.orderNo ?? x.orderId ?? ''),
+        status: String(x.status ?? ''),
+        created_at: new Date(Number(x.createTime ?? Date.now())).toISOString(),
+        currency: String(x.fiatCurrency ?? 'mxn').toLowerCase(),
+        amount: String(x.amount ?? x.indicatedAmount ?? '0'),
+        kind,
+      }));
+    return [...map((deps as any).data, 'DEPOSIT'), ...map((wds as any).data, 'WITHDRAWAL')];
+  }
+
   async ping(): Promise<boolean> {
     try {
       await this.request<any>('GET', '/api/v3/ping');

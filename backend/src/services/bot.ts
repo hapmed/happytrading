@@ -149,6 +149,31 @@ async function syncBitsoMovements(userId: string, client: ExchangeClient): Promi
       } catch {}
     }
   } catch {}
+
+  // Movimientos FIAT (MXN/SPEI): depósitos = inversión; retiros = salida.
+  try {
+    const fm = await (client as any).fiatMovements?.();
+    for (const m of fm ?? []) {
+      try {
+        const wid = String(m?.wid ?? '');
+        if (!wid) continue;
+        const createdMs = new Date(m?.created_at ?? 0).getTime();
+        if (!(createdMs > Date.now() - 365 * 864e5)) continue;
+        const note = `binance-fiat:${m.kind}:${wid}`;
+        if (await prisma.deposit.findFirst({ where: { userId, note } })) continue;
+        const amount = Number(m?.amount ?? 0);
+        if (!(amount > 0)) continue;
+        await prisma.deposit.create({
+          data: { userId, currency: 'mxn', amount: String(amount), kind: m.kind, note },
+        });
+        await logEvent(
+          userId,
+          `${m.kind === 'DEPOSIT' ? '⬇ Depósito MXN (inversión)' : '⬆ Retiro MXN'}: $${amount.toFixed(2)}`,
+          'ok',
+        );
+      } catch {}
+    }
+  } catch {}
   try {
     const wds = await client.withdrawals();
     for (const w of wds) {
