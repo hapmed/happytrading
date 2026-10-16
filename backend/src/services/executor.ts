@@ -282,8 +282,9 @@ export async function runExecutorAll(): Promise<void> {
       if (ins.side === 'BUY') {
         const minor = Number(ins.amountMxn ?? 0);
         const lim = limits.get(ins.symbol);
-        if (minor <= 1 || (lim && lim.minimumValue > 0 && minor < lim.minimumValue)) {
-          await logEvent(user.id, `Plan cancelado ${ins.symbol}: monto bajo el mínimo`, 'warn');
+        const minNeed = Math.max(0.5, lim?.minimumValue ?? 0);
+        if (!(minor > 0) || minor < minNeed) {
+          await logEvent(user.id, `Plan cancelado ${ins.symbol}: monto bajo el mínimo ($${minor})`, 'warn');
           await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'CANCELLED' } });
           continue;
         }
