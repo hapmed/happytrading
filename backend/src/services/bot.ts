@@ -13,7 +13,14 @@ import { getIndicators } from '../lib/indicators.js';
 const SYMBOLS: Record<string, string[]> = {
   conservative: ['btc_mxn', 'eth_mxn'],
   balanced: ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'],
-  aggressive: ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn', 'ltc_mxn', 'trx_mxn', 'mana_mxn'],
+  aggressive: [
+    'btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn', 'ltc_mxn', 'trx_mxn', 'mana_mxn',
+    'ada_mxn', 'doge_mxn', 'avax_mxn', 'link_mxn', 'dot_mxn', 'atom_mxn', 'uni_mxn', 'aave_mxn',
+    'near_mxn', 'algo_mxn', 'sand_mxn', 'gala_mxn', 'enj_mxn', 'chz_mxn', 'xtz_mxn', 'xlm_mxn',
+    'vet_mxn', 'hbar_mxn', 'theta_mxn', 'zil_mxn', 'bat_mxn', 'snx_mxn', 'crv_mxn', 'comp_mxn',
+    'mkr_mxn', 'yfi_mxn', 'rune_mxn', 'kava_mxn', 'band_mxn', 'ocean_mxn', 'storj_mxn', 'grt_mxn',
+    'imx_mxn', 'dydx_mxn', 'gmx_mxn', 'arb_mxn', 'op_mxn', 'sei_mxn', 'tia_mxn', 'wld_mxn', 'jup_mxn', 'pyth_mxn',
+  ],
 };
 const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.6, aggressive: 0.45 };
 const DEFAULT_ORDER_MXN = 200;
@@ -91,7 +98,7 @@ async function resolveSymbols(
   const validSet = new Set(books);
   const def = (SYMBOLS[profile] ?? SYMBOLS.balanced)
     .map((s) => s.replace('_mxn', `_${quote}`))
-    .filter((s) => !s.startsWith(`${quote}_`));
+    .filter((s) => !s.startsWith(`${quote}_`) && (!books.length || validSet.has(s)));
   // Pares de mínimo bajo (1 USDT) y alta volatilidad: permiten operar con poco capital.
   const MICRO = ['doge', 'pepe', 'shib', 'floki', 'bonk', 'wif', 'bome', 'pengu', 'trump', 'neiro', 'turbo', 'act', 'pnut'];
   const microList = quote === 'usdt' ? MICRO.map((m) => `${m}_usdt`).filter((s) => !books.length || validSet.has(s)) : [];

@@ -382,44 +382,7 @@ export async function userRoutes(app: FastifyInstance) {
     return { results, vaultBoughtMxn: boughtMxn, vaultAsset };
   });
 
-  // "Ya retiré": registra el retiro y REINICIA la bóveda a 0.
-  app.post('/vault/withdraw', { preHandler: [authenticate] }, async (req) => {
-    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user) return { ok: false };
-    const body = (req.body ?? {}) as { amount?: number };
-    const deps = await prisma.deposit.findMany({ where: { userId: user.id } });
-    const netDeposits = deps.reduce(
-      (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
-      0,
-    );
-    const invested = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
-    const basePnl = user.vaultBasePnl ? Number(user.vaultBasePnl) : 0;
-    let currentValue = 0;
-    try {
-      currentValue = (await getLiveValuation(user.id)).currentValue;
-    } catch {}
-    const pnl = currentValue - invested;
-    const vault = Math.max(0, pnl - basePnl);
-    const amount = body.amount && body.amount > 0 ? Math.min(body.amount, vault) : vault;
-    if (amount > 0) {
-      await prisma.deposit.create({
-        data: {
-          userId: user.id,
-          currency: 'mxn',
-          amount: String(Math.round(amount * 100) / 100),
-          kind: 'WITHDRAWAL',
-          note: 'retiro de la bóveda de ganancias',
-        },
-      });
-    }
-    // Reinicia la bóveda: la ganancia acumulada vuelve a 0 desde ahora.
-    // (Al registrar el retiro, el capital invertido baja, así que el nuevo PnL sube por `amount`.)
-    const newBasePnl = pnl + (amount > 0 ? amount : 0);
-    await prisma.user.update({ where: { id: user.id }, data: { vaultBasePnl: String(newBasePnl) } });
-    return { ok: true, withdrawn: amount };
-  });
 
-  // Retiro de ganancias por SPEI a la CLABE configurada.
   // Retiro de ganancias por SPEI a la CLABE configurada (Binance fiat withdraw).
   app.post('/payout', { preHandler: [authenticate] }, async (req, reply) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
