@@ -114,6 +114,21 @@ export default function Settings() {
             Con ROTAR ON, si ve una gran oportunidad y no hay efectivo, <b>vende lo que tengas en hold</b> para comprarla (ganancias más rápidas, más riesgo).
           </p>
           <Field
+            label="MONEDAS MÁS VOLÁTILES A ANALIZAR"
+            help="Cada pasada mide el movimiento y la IA analiza solo las N más volátiles. 0 = todas. Menos = menos tokens (free tier) y más oportunidades."
+          >
+            <input
+              className="pixel-input"
+              type="number"
+              defaultValue={user?.volatileTop ?? 3}
+              onBlur={(e) => {
+                const v = parseInt(e.target.value);
+                if (v >= 0 && v <= 20) updatePref({ volatileTop: v });
+              }}
+              placeholder="ej. 3"
+            />
+          </Field>
+          <Field
             label="MONTO MÁXIMO POR ORDEN (MXN)"
             help="Tope de dinero por cada compra. El bot nunca gastará más que esto en una sola orden."
           >

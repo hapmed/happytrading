@@ -202,6 +202,7 @@ export async function runBotForUser(userId: string): Promise<void> {
   const profile = user.profile ?? 'balanced';
   const minConf = MIN_CONF[profile] ?? 0.6;
   const rotate = user.rotate !== false;
+  const volatileTop = user.volatileTop ?? 3;
   const dcaLevels = user.dcaLevels ? Math.max(1, Math.min(10, user.dcaLevels)) : 3;
   const dcaStepPct = user.dcaStepPct ? Number(user.dcaStepPct) : 2;
   const heldCurrencies = balances
@@ -219,9 +220,33 @@ export async function runBotForUser(userId: string): Promise<void> {
     await logEvent(userId, `Régimen: ${regime.zone} (${regime.score}/100)`, regime.zone === 'RISK_OFF' ? 'warn' : 'info');
   }
 
-  for (const symbol of symbols) {
+  // ⚡ Selección VOLÁTIL: mide el movimiento (ticker) y se queda con las N más volátiles.
+  const tickerCache = new Map<string, any>();
+  const ranked: Array<{ symbol: string; vol: number }> = [];
+  for (const sym of symbols) {
     try {
-      const ticker = await client.ticker(symbol);
+      const t = await client.ticker(sym);
+      tickerCache.set(sym, t);
+      const last = Number(t.last ?? 0);
+      const high = Number(t.high ?? 0);
+      const low = Number(t.low ?? 0);
+      const vol = last > 0 ? ((high - low) / last) * 100 : 0;
+      ranked.push({ symbol: sym, vol });
+    } catch {}
+  }
+  ranked.sort((a, b) => b.vol - a.vol);
+  const selected = (volatileTop > 0 ? ranked.slice(0, volatileTop) : ranked).map((r) => r.symbol);
+  if (selected.length) {
+    await logEvent(
+      userId,
+      `⚡ Top volátiles: ${selected.map((s) => `${s.split('_')[0].toUpperCase()} ${(ranked.find((r) => r.symbol === s)?.vol ?? 0).toFixed(1)}%`).join(' · ')}`,
+      'info',
+    );
+  }
+
+  for (const symbol of selected) {
+    try {
+      const ticker = tickerCache.get(symbol) ?? (await client.ticker(symbol));
       const last = Number(ticker.last ?? 0);
       const base = symbol.split('_')[0];
       const bal = balances.find((b) => String(b.currency).toLowerCase() === base);
