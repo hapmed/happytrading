@@ -17,11 +17,33 @@ export function Panel({ title, children, className = '' }: any) {
   );
 }
 
+function CountUp({ n }: { n: number }) {
+  const [v, setV] = React.useState(n);
+  const from = React.useRef(n);
+  React.useEffect(() => {
+    const a = from.current;
+    const b = n;
+    if (a === b) return;
+    let raf = 0;
+    const start = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / 700);
+      const e = 1 - Math.pow(1 - p, 3);
+      setV(a + (b - a) * e);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else from.current = b;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [n]);
+  return <>{Math.round(v).toLocaleString('es-MX')}</>;
+}
+
 export function Stat({ label, value, accent = '' }: any) {
   return (
     <div className={`stat ${accent}`}>
       <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
+      <div className="stat-value">{typeof value === 'number' ? <CountUp n={value} /> : value}</div>
     </div>
   );
 }

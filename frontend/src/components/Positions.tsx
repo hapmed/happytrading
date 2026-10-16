@@ -34,7 +34,7 @@ export default function Positions() {
         <>
           <div className="stat-grid" style={{ marginBottom: 16 }}>
             <Stat label="EN POSICIONES" value={`$${money(totalValue)}`} accent="cyan" />
-            <Stat label={totalPnl >= 0 ? 'GANANCIA' : 'PÉRDIDA'} value={`${totalPnl >= 0 ? '+' : '−'}$${money(Math.abs(totalPnl))}`} accent={totalPnl >= 0 ? 'green' : 'magenta'} />
+            <Stat label={totalPnl >= 0 ? 'GANANCIA' : 'PÉRDIDA'} value={`${totalPnl >= 0 ? '+' : '−'}$${money(Math.abs(totalPnl))}`} accent={totalPnl >= 0 ? 'green' : 'red'} />
           </div>
 
           <div className="pos-list">

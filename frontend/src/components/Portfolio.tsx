@@ -159,7 +159,7 @@ export default function Portfolio() {
         <div className="stat-grid" style={{ marginTop: 14, marginBottom: 0 }}>
           <Stat label="INVERTIDO" value={`$${fmt(aInv)}`} accent="yellow" />
           <Stat label="VALOR ACTUAL" value={`$${fmt(aCur)}`} accent="cyan" />
-          <Stat label={gain ? 'GANANCIA' : 'PÉRDIDA'} value={`$${fmt(Math.abs(pnl))}`} accent={gain ? 'green' : 'magenta'} />
+          <Stat label={gain ? 'GANANCIA' : 'PÉRDIDA'} value={`$${fmt(Math.abs(pnl))}`} accent={gain ? 'green' : 'red'} />
           <Stat label="DEPÓSITOS" value={`$${fmt(Number(data?.netDeposits ?? 0))}`} accent="yellow" />
         </div>
         <div className="muted center" style={{ marginTop: 8, fontSize: 15 }}>

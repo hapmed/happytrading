@@ -54,6 +54,13 @@ function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <div className="container">{children}</div>
+      <div className="fx-coins" aria-hidden="true">
+        {['🪙', '💸', '📈', '🪙', '💵', '📉', '🪙', '💰'].map((e, i) => (
+          <span key={i} style={{ left: `${(i * 13 + 4) % 96}%`, animationDelay: `${i * 1.7}s`, fontSize: `${16 + (i % 3) * 10}px` }}>
+            {e}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

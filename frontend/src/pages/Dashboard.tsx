@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import { Panel, Stat, PixelButton } from '../components/Retro';
+import { Panel, Stat } from '../components/Retro';
 import BotActivity from '../components/BotActivity';
 import Portfolio from '../components/Portfolio';
 import AutoStatus from '../components/AutoStatus';
 import Positions from '../components/Positions';
-import RecentTrades from '../components/RecentTrades';
 import Instructions from '../components/Instructions';
 import Usage from '../components/Usage';
+import RecentTrades from '../components/RecentTrades';
+import Signals from '../components/Signals';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -39,83 +40,66 @@ export default function Dashboard() {
 
   const buys = trades.filter((t) => t.side === 'BUY').length;
   const sells = trades.filter((t) => t.side === 'SELL').length;
-  const aiTrades = trades.filter((t) => t.source === 'AI').length;
 
   return (
     <div>
       <div className="spread mb">
-        <h2 style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: 'var(--green)' }}>
+        <h2 style={{ fontFamily: 'var(--font-pixel)', fontSize: 14 }} className="floaty grad-text">
           BIENVENIDO, {user?.name || user?.username || user?.email}
         </h2>
         <span className="floaty" style={{ fontSize: 26 }}>🪙</span>
       </div>
-
-      <AutoStatus />
-      <Portfolio />
-      <Positions />
-      <Instructions />
-      <Usage />
-      <BotActivity />
 
       {!user?.hasBitso && (
         <div className="error-msg">
           ⚠ NO HAS CONECTADO TU API DE BITSO. VE A <Link to="/settings">CONFIG</Link> PARA CONECTARLA.
         </div>
       )}
-
-      <div className="stat-grid">
-        <Stat label="OPERACIONES" value={trades.length} accent="green" />
-        <Stat label="COMPRAS" value={buys} accent="green" />
-        <Stat label="VENTAS" value={sells} accent="magenta" />
-        <Stat label="SEÑALES IA" value={signals.length} accent="yellow" />
-        <Stat label="AUTO-TRADING" value={user?.autoTrade ? 'ON' : 'OFF'} accent={user?.autoTrade ? 'green' : ''} />
-      </div>
-
       {error && <div className="error-msg">{error}</div>}
 
-      {balances.length > 0 && (
-        <Panel title="◈ SALDO EN BITSO">
-          <div className="stat-grid">
-            {balances
-              .filter((b) => ['mxn', 'btc', 'eth', 'usdc', 'usdt', 'xrp', 'sol'].includes(String(b.currency).toLowerCase()))
-              .slice(0, 6)
-              .map((b) => (
-                <Stat key={b.currency} label={String(b.currency).toUpperCase()} value={b.available} accent="cyan" />
-              ))}
+      <div className="dash">
+        <div className="dash-full">
+          <AutoStatus />
+        </div>
+        <div className="dash-full">
+          <Portfolio />
+        </div>
+
+        <div className="dash-full">
+          <div className="stat-grid" style={{ marginBottom: 0 }}>
+            <Stat label="OPERACIONES" value={trades.length} accent="green" />
+            <Stat label="COMPRAS" value={buys} accent="green" />
+            <Stat label="VENTAS" value={sells} accent="magenta" />
+            <Stat label="SEÑALES IA" value={signals.length} accent="yellow" />
+            <Stat label="AUTO" value={user?.autoTrade ? 'ON' : 'OFF'} accent={user?.autoTrade ? 'green' : ''} />
           </div>
-        </Panel>
-      )}
+        </div>
 
-      <Panel title="◈ ÚLTIMAS SEÑALES DE IA">
-        {signals.length === 0 ? (
-          <div className="muted center">AÚN NO HAY SEÑALES. EL BOT GENERARÁ SEÑALES CUANDO TENGAS BITSO CONECTADO.</div>
-        ) : (
-          <table className="retro-table">
-            <thead>
-              <tr>
-                <th>PAR</th>
-                <th>ACCIÓN</th>
-                <th>CONF.</th>
-                <th>RAZÓN</th>
-              </tr>
-            </thead>
-            <tbody>
-              {signals.slice(0, 12).map((s) => (
-                <tr key={s.id}>
-                  <td>{s.symbol}</td>
-                  <td>
-                    <span className={`badge ${s.action.toLowerCase()}`}>{s.action}</span>
-                  </td>
-                  <td>{(Number(s.confidence) * 100).toFixed(0)}%</td>
-                  <td className="muted">{s.reasoning || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {balances.length > 0 && (
+          <div className="dash-full">
+            <Panel title="◈ SALDO EN BITSO">
+              <div className="stat-grid" style={{ marginBottom: 0 }}>
+                {balances
+                  .filter((b) => ['mxn', 'btc', 'eth', 'usdc', 'usdt', 'xrp', 'sol', 'trx'].includes(String(b.currency).toLowerCase()))
+                  .slice(0, 8)
+                  .map((b) => (
+                    <Stat key={b.currency} label={String(b.currency).toUpperCase()} value={b.available} accent="cyan" />
+                  ))}
+              </div>
+            </Panel>
+          </div>
         )}
-      </Panel>
 
-      <RecentTrades trades={trades} />
+        <Positions />
+        <Instructions />
+        <Usage />
+        <RecentTrades trades={trades} />
+        <Signals signals={signals} />
+
+        <div className="dash-full">
+          <BotActivity />
+        </div>
+      </div>
     </div>
   );
 }
