@@ -45,8 +45,13 @@ export class BitsoClient {
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data?.success === false) {
-      const err: any = data;
-      throw new Error(`Bitso API ${res.status}: ${err?.error?.message ?? JSON.stringify(data)}`);
+      const e: any = data;
+      const code = e?.error?.code ? `[${e.error.code}] ` : '';
+      const detail = e?.error?.message ?? JSON.stringify(data);
+      const err: any = new Error(`Bitso API ${res.status}: ${code}${detail}`);
+      err.bitsoCode = e?.error?.code;
+      err.bitsoBody = data;
+      throw err;
     }
     return data as T;
   }
