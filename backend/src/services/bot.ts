@@ -455,6 +455,24 @@ async function planForUser(userId: string): Promise<void> {
     'info',
   );
 
+  // ── Ahorro de tokens: si no hay capital para operar, NO llamamos a la IA ──
+  let minViable = Number.POSITIVE_INFINITY;
+  for (const s of symbols) {
+    const lim = limits.get(s);
+    if (lim?.minimumValue) minViable = Math.min(minViable, lim.minimumValue);
+  }
+  if (!isFinite(minViable)) minViable = 5;
+  minViable = Math.max(minViable, 1);
+  if (cashRemaining < minViable && cryptoValue <= 0.000001) {
+    await logEvent(
+      userId,
+      `⏸ Sin fondos para operar (caja $${cashRemaining.toFixed(2)} · mínimo $${minViable.toFixed(2)}) — IA en pausa para ahorrar tokens`,
+      'warn',
+    );
+    await setState(userId, 'idle', 'Sin fondos · IA en pausa');
+    return;
+  }
+
   // ⚡ Selección VOLÁTIL: mide el movimiento (ticker) y se queda con las N más volátiles.
   const tickerCache = new Map<string, any>();
   const ranked: Array<{ symbol: string; vol: number }> = [];
