@@ -13,7 +13,6 @@ interface Point {
  */
 export default function ProfitVault() {
   const [data, setData] = useState<any>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = () => api('/me/vault').then(setData).catch(() => {});
 
@@ -39,19 +38,6 @@ export default function ProfitVault() {
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${(i * step).toFixed(1)} ${(H - (Number(p.v) / max) * H).toFixed(1)}`)
     .join(' ');
   const area = `${path} L ${W} ${H} L 0 ${H} Z`;
-
-  const withdraw = async () => {
-    if (busy || ready <= 0) return;
-    setBusy(true);
-    try {
-      await api('/me/vault/withdraw', { method: 'POST', body: JSON.stringify({ amount: ready }) });
-      await load();
-    } catch {
-      /* ignore */
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <Panel title="◈ BÓVEDA DE GANANCIAS">
@@ -88,13 +74,10 @@ export default function ProfitVault() {
       </svg>
 
       <div className="vault-foot">
-        <button className="pixel-btn" onClick={withdraw} disabled={busy || ready <= 0}>
-          {busy ? '…' : `💸 YA RETIRÉ $${ready.toFixed(2)}`}
-        </button>
         <div className="vault-help">
           Las ganancias se <b>quedan en pesos</b> dentro de Bitso (el bot <b>no las reinvierte</b>). Retíralas cuando
-          quieras: <b>app de Bitso → Retirar → Pesos (SPEI)</b>. Al marcar «YA RETIRÉ», la bóveda se{' '}
-          <b>reinicia a $0</b>.
+          quieras: <b>app de Bitso → Retirar → Pesos (SPEI)</b>. El retiro se <b>detecta automáticamente</b> y la
+          bóveda se <b>reinicia a $0</b> sola. ✨
         </div>
       </div>
     </Panel>

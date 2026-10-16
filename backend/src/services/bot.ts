@@ -112,46 +112,45 @@ async function resolveSymbols(
 }
 
 /**
- * Registra depósitos/retiros REALES de Bitso (endpoints oficiales), deduplicados por id.
- * El monto se guarda SIEMPRE en MXN (las criptos se valúan al momento de detectarlas)
- * para que el PnL sea confiable: PnL = valor_actual − (capital_inicial + neto_depósitos).
+ * Detecta RETIROS reales desde la API de Bitso (el endpoint de depósitos da 404).
+ * Devuelve cuánto se retiró (nuevo) para poder reiniciar la bóveda automáticamente.
  */
-async function syncBitsoMovements(userId: string, client: BitsoClient): Promise<void> {
-  const record = async (kind: 'DEPOSIT' | 'WITHDRAWAL', raw: any[]) => {
-    for (const m of raw) {
+async function syncBitsoMovements(userId: string, client: BitsoClient): Promise<{ withdrawn: number }> {
+  let withdrawn = 0;
+  try {
+    const wds = await client.withdrawals();
+    for (const w of wds) {
       try {
-        const id = String(m?.id ?? '');
-        if (!id) continue;
-        const status = String(m?.status ?? '').toLowerCase();
-        if (status && !/complete|confirm|done|settled/.test(status)) continue; // solo confirmados
-        const note = `bitso:${id}`;
+        const wid = String(w?.wid ?? w?.id ?? '');
+        if (!wid) continue;
+        const status = String(w?.status ?? '').toLowerCase();
+        if (status && !/complete|confirm|done|sent|processing|pending/.test(status)) continue;
+        const createdMs = new Date(w?.created_at ?? 0).getTime();
+        if (!(createdMs > Date.now() - 45 * 864e5)) continue; // ignora retiros viejos (histórico)
+        const note = `bitso:${wid}`;
         if (await prisma.deposit.findFirst({ where: { userId, note } })) continue;
-        const currency = String(m?.currency ?? 'mxn').toLowerCase();
-        const rawAmount = Number(m?.amount ?? 0);
-        if (!(rawAmount > 0)) continue;
-        let mxn = rawAmount;
+        const currency = String(w?.currency ?? 'mxn').toLowerCase();
+        let mxn = Number(w?.amount ?? 0);
+        if (!(mxn > 0)) continue;
         if (currency !== 'mxn') {
           const t = await client.ticker(`${currency}_mxn`);
           const p = Number(t.last ?? 0);
           if (!(p > 0)) continue;
-          mxn = rawAmount * p;
+          mxn = mxn * p;
         }
-        await prisma.deposit.create({ data: { userId, currency, amount: String(mxn), kind, note } });
+        await prisma.deposit.create({ data: { userId, currency, amount: String(mxn), kind: 'WITHDRAWAL', note } });
+        withdrawn += mxn;
         await logEvent(
           userId,
-          `${kind === 'DEPOSIT' ? '⬇ Depósito' : '⬆ Retiro'} registrado: ${rawAmount} ${currency.toUpperCase()} (~$${mxn.toFixed(2)} MXN) — no cuenta como ganancia`,
-          kind === 'DEPOSIT' ? 'ok' : 'warn',
+          `⬆ Retiro detectado (automático): ${Number(w.amount).toFixed(2)} ${currency.toUpperCase()} (~$${mxn.toFixed(2)} MXN)`,
+          'ok',
         );
       } catch {}
     }
-  };
-  try {
-    const [deps, wds] = await Promise.all([client.deposits(40), client.withdrawals(40)]);
-    await record('DEPOSIT', deps);
-    await record('WITHDRAWAL', wds);
   } catch (err) {
-    await logEvent(userId, `No se pudieron leer movimientos de Bitso: ${(err as Error).message.slice(0, 50)}`, 'warn');
+    await logEvent(userId, `No se pudieron leer retiros de Bitso: ${(err as Error).message.slice(0, 50)}`, 'warn');
   }
+  return { withdrawn };
 }
 
 /**
@@ -225,9 +224,8 @@ async function planForUser(userId: string): Promise<void> {
   const mxn = balances.find((b) => String(b.currency).toLowerCase() === 'mxn');
   const mxnAvailable = Number(mxn?.available ?? '0');
 
-  // Movimientos REALES de Bitso (depósitos/retiros oficiales) → NO cuentan como ganancia.
-  // (Antes se inferían por diferencia de saldo y el trading generaba falsos retiros.)
-  await syncBitsoMovements(userId, client);
+  // Movimientos REALES de Bitso (retiros) → NO cuentan como ganancia y reinician la bóveda.
+  const movements = await syncBitsoMovements(userId, client);
 
   const maxOrder = user.maxOrderAmount ? Number(user.maxOrderAmount) : DEFAULT_ORDER_MXN;
   const riskPct = user.riskPct ? Number(user.riskPct) : 1;
@@ -302,7 +300,15 @@ async function planForUser(userId: string): Promise<void> {
   );
   const workingCapital = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
   const cryptoValue = Math.max(0, equityMxn - mxnAvailable);
-  const profitReserve = Math.max(0, equityMxn - workingCapital);
+  let profitReserve = Math.max(0, equityMxn - workingCapital);
+  if (movements.withdrawn > 0) {
+    // Retiro detectado automáticamente → REINICIA la bóveda (ganancia acumulada vuelve a $0).
+    profitReserve = 0;
+    await prisma.user
+      .update({ where: { id: userId }, data: { vaultBasePnl: String(equityMxn - workingCapital) } })
+      .catch(() => {});
+    await logEvent(userId, `🔄 Bóveda reiniciada por retiro detectado ($${movements.withdrawn.toFixed(2)})`, 'ok');
+  }
   const reservePct = equityMxn * (cashReservePct / 100);
   // Efectivo disponible para operar, sin tocar la bóveda de ganancias.
   let cashRemaining = Math.max(

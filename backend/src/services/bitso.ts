@@ -114,8 +114,8 @@ export class BitsoClient {
     return data.payload ?? [];
   }
 
-  async withdrawals(limit = 50) {
-    const data = await this.request<{ payload: any[] }>('GET', `/api/v3/withdrawals/?limit=${limit}`);
+  async withdrawals() {
+    const data = await this.request<{ payload: any[] }>('GET', '/api/v3/withdrawals/');
     return data.payload ?? [];
   }
 
