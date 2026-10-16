@@ -337,36 +337,6 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
-  // Sonda de endpoints (diagnóstico temporal).
-  app.get('/probe', { preHandler: [authenticate] }, async (req, reply) => {
-    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) return reply.code(400).send({ error: 'Bitso no conectado' });
-    const client = new BitsoClient({
-      apiKey: decrypt(user.bitsoApiKey),
-      apiSecret: decrypt(user.bitsoApiSecret),
-    });
-    const paths = [
-      '/api/v3/withdrawals/',
-      '/api/v3/withdrawals',
-      '/api/v3/deposits/',
-      '/api/v3/deposits',
-      '/api/v3/balance/',
-      '/api/v3/user_trades/?limit=1',
-      '/api/v3/mx_bank_codes/',
-      '/api/v3/withdrawal_methods/',
-    ];
-    const out: any[] = [];
-    for (const p of paths) {
-      try {
-        const d = await client.probe(p);
-        out.push({ path: p, ok: true, sample: JSON.stringify(d).slice(0, 140) });
-      } catch (e: any) {
-        out.push({ path: p, ok: false, error: String(e.message).slice(0, 110) });
-      }
-    }
-    return { out };
-  });
-
   // Bóveda de ganancias: cuánto se ha acumulado desde el último retiro + historial (gráfica).
   app.get('/vault', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
