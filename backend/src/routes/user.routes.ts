@@ -154,7 +154,10 @@ export async function userRoutes(app: FastifyInstance) {
         apiKey: decrypt(user.bitsoApiKey),
         apiSecret: decrypt(user.bitsoApiSecret),
       });
-      return await client.accountStatus();
+      const status = await client.accountStatus();
+      // Prefijo de la API key para que el usuario identifique cuál editar en Bitso.
+      const prefix = decrypt(user.bitsoApiKey).slice(0, 6);
+      return { ...status, apiKeyPrefix: `${prefix}…` };
     } catch (err: any) {
       return reply.code(400).send({ error: err.message });
     }
