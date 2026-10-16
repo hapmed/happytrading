@@ -4,7 +4,7 @@ import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
 import { makeExchangeClient } from '../lib/exchange.js';
 
-const VOL_CANDIDATES = ['btc_mxn', 'eth_mxn', 'sol_mxn', 'xrp_mxn', 'trx_mxn', 'mana_mxn', 'ltc_mxn'];
+const VOL_CANDIDATES = ['btc', 'eth', 'sol', 'xrp', 'trx', 'mana', 'ltc'];
 
 /**
  * Endpoint PÚBLICO para el widget de iOS (Scriptable).
@@ -48,25 +48,26 @@ export async function widgetRoutes(app: FastifyInstance) {
     const mood =
       invested > 0.01 && pnl > 0.01 ? 'profit' : invested > 0.01 && pnl < -0.01 ? 'loss' : zone === 'RISK_OFF' ? 'loss' : 'idle';
 
-    // Top 3 monedas más volátiles (para el widget)
+    // Top 3 monedas más volátiles (para el widget) — con la cotización del usuario.
     let top: Array<{ symbol: string; vol: number }> = [];
-    if (true) {
-      try {
-        const client = await makeExchangeClient(user);
-        const vols: Array<{ symbol: string; vol: number }> = [];
-        if (client) for (const s of VOL_CANDIDATES) {
+    try {
+      const client = await makeExchangeClient(user);
+      const quote = (user.quote ?? 'mxn').toLowerCase();
+      const vols: Array<{ symbol: string; vol: number }> = [];
+      if (client)
+        for (const base of VOL_CANDIDATES) {
+          const s = `${base}_${quote}`;
           try {
             const t = await client.ticker(s);
             const last = Number(t.last ?? 0);
             const high = Number(t.high ?? 0);
             const low = Number(t.low ?? 0);
-            vols.push({ symbol: s, vol: last > 0 ? ((high - low) / last) * 100 : 0 });
+            if (last > 0) vols.push({ symbol: s, vol: ((high - low) / last) * 100 });
           } catch {}
         }
-        vols.sort((a, b) => b.vol - a.vol);
-        top = vols.slice(0, 3);
-      } catch {}
-    }
+      vols.sort((a, b) => b.vol - a.vol);
+      top = vols.slice(0, 3);
+    } catch {}
 
     return {
       ok: true,

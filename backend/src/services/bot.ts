@@ -69,7 +69,7 @@ async function tryRotate(userId: string, excludeSymbol: string, client: Exchange
 
 /**
  * Lista de pares a operar:
- *  - "auto"        → todos los pares contra MXN que ofrece Bitso
+ *  - "auto"        → todos los pares disponibles
  *  - "a,b,c"       → lista personalizada
  *  - vacío         → según el perfil
  */
@@ -117,11 +117,38 @@ async function resolveSymbols(
 }
 
 /**
- * Detecta RETIROS reales desde la API de Bitso (el endpoint de depósitos da 404).
+ * Detecta RETIROS reales desde la API de Binance (el endpoint de depósitos da 404).
  * Devuelve cuánto se retiró (nuevo) para poder reiniciar la bóveda automáticamente.
  */
 async function syncBitsoMovements(userId: string, client: ExchangeClient): Promise<{ withdrawn: number }> {
   let withdrawn = 0;
+  // Depósitos: se suman como INVERSIÓN (nunca como ganancia).
+  try {
+    const deps = await (client as any).deposits?.();
+    for (const d of deps ?? []) {
+      try {
+        const wid = String(d?.wid ?? '');
+        if (!wid) continue;
+        const status = String(d?.status ?? '').toLowerCase();
+        if (status && !/complete|success|1/.test(status)) continue;
+        const createdMs = new Date(d?.created_at ?? 0).getTime();
+        if (!(createdMs > Date.now() - 365 * 864e5)) continue;
+        const note = `binance-dep:${wid}`;
+        if (await prisma.deposit.findFirst({ where: { userId, note } })) continue;
+        const currency = String(d?.currency ?? '').toLowerCase();
+        let mxn = Number(d?.amount ?? 0);
+        if (!(mxn > 0)) continue;
+        if (currency !== 'mxn') {
+          const t = await client.ticker(`${currency}_mxn`);
+          const p = Number(t.last ?? 0);
+          if (!(p > 0)) continue;
+          mxn = mxn * p;
+        }
+        await prisma.deposit.create({ data: { userId, currency, amount: String(mxn), kind: 'DEPOSIT', note } });
+        await logEvent(userId, `⬇ Depósito (inversión): ${Number(d.amount).toFixed(2)} ${currency.toUpperCase()} (~$${mxn.toFixed(2)} MXN)`, 'ok');
+      } catch {}
+    }
+  } catch {}
   try {
     const wds = await client.withdrawals();
     for (const w of wds) {
@@ -132,7 +159,7 @@ async function syncBitsoMovements(userId: string, client: ExchangeClient): Promi
         if (status && !/complete|confirm|done|sent|processing|pending/.test(status)) continue;
         const createdMs = new Date(w?.created_at ?? 0).getTime();
         if (!(createdMs > Date.now() - 45 * 864e5)) continue; // ignora retiros viejos (histórico)
-        const note = `bitso:${wid}`;
+        const note = `binance-wd:${wid}`;
         if (await prisma.deposit.findFirst({ where: { userId, note } })) continue;
         const currency = String(w?.currency ?? 'mxn').toLowerCase();
         let mxn = Number(w?.amount ?? 0);
@@ -153,7 +180,7 @@ async function syncBitsoMovements(userId: string, client: ExchangeClient): Promi
       } catch {}
     }
   } catch (err) {
-    await logEvent(userId, `No se pudieron leer retiros de Bitso: ${(err as Error).message.slice(0, 50)}`, 'warn');
+    await logEvent(userId, `No se pudieron leer retiros de Binance: ${(err as Error).message.slice(0, 50)}`, 'warn');
   }
   return { withdrawn };
 }
@@ -199,8 +226,8 @@ async function planForUser(userId: string): Promise<void> {
   try {
     balances = await client.balance();
   } catch (err) {
-    await logEvent(userId, `Error Bitso: ${(err as Error).message}`, 'error');
-    await setState(userId, 'error', 'Error de conexión Bitso');
+    await logEvent(userId, `Error de conexión: ${(err as Error).message}`, 'error');
+    await setState(userId, 'error', 'Error de conexión');
     throw err;
   }
   await logEvent(userId, `Saldo leído · ${balances.length} monedas`, 'info');
@@ -232,7 +259,7 @@ async function planForUser(userId: string): Promise<void> {
   const cashBal = balances.find((b) => String(b.currency).toLowerCase() === quote);
   const cashAvailable = Number(cashBal?.available ?? '0');
 
-  // Movimientos REALES de Bitso (retiros) → NO cuentan como ganancia y reinician la bóveda.
+  // Movimientos reales del exchange (retiros) → NO cuentan como ganancia y reinician la bóveda.
   const movements = await syncBitsoMovements(userId, client);
 
   const maxOrder = user.maxOrderAmount ? Number(user.maxOrderAmount) : DEFAULT_ORDER_MXN;
@@ -539,7 +566,7 @@ async function planForUser(userId: string): Promise<void> {
         let spend = Math.min(maxOrder, size, cashRemaining);
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
 
-        // Respetar mínimos de Bitso (monto y valor por orden) antes de crear el plan
+        // Respetar mínimos del exchange (monto y valor por orden) antes de crear el plan
         const lim = limits.get(symbol);
         const minValue = lim?.minimumValue ?? 0;
         const minAmount = lim?.minimumAmount ?? 0;
@@ -586,7 +613,7 @@ async function planForUser(userId: string): Promise<void> {
         const limS = limits.get(symbol);
         const belowMinS = limS && (qty < limS.minimumAmount || qty * last < limS.minimumValue);
         if (qty <= 0 || belowMinS) {
-          await logEvent(userId, `Venta de ${symbol} no cumple el mínimo de Bitso · se omite`, 'warn');
+          await logEvent(userId, `Venta de ${symbol} no cumple el mínimo del exchange · se omite`, 'warn');
           continue;
         }
         const target = signal.takeProfitPrice && signal.takeProfitPrice > 0 ? signal.takeProfitPrice : last;

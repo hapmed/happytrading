@@ -160,6 +160,22 @@ export class BinanceClient {
     return this.request<any>('DELETE', '/api/v3/order', params, true);
   }
 
+  // ── Depósitos (para no contarlos como ganancia) ───────────────────
+  async deposits(): Promise<Array<{ wid: string; status: string; created_at: string; currency: string; amount: string }>> {
+    const d = await this.request<any[]>('GET', '/sapi/v1/capital/deposit/hisrec', { limit: 50 }, true);
+    return (d ?? []).map((x: any) => {
+      const st = String(x.status);
+      const status = st === '1' || /success/i.test(st) ? 'complete' : st;
+      return {
+        wid: String(x.id ?? x.txId ?? ''),
+        status,
+        created_at: new Date(Number(x.insertTime ?? Date.now())).toISOString(),
+        currency: String(x.coin ?? '').toLowerCase(),
+        amount: String(x.amount ?? '0'),
+      };
+    });
+  }
+
   // ── Retiros (para detectar salidas) ───────────────────────────────
   async withdrawals(): Promise<Array<{ wid: string; status: string; created_at: string; currency: string; amount: string }>> {
     const d = await this.request<any[]>('GET', '/sapi/v1/capital/withdraw/history', {}, true);

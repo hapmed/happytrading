@@ -223,7 +223,7 @@ export default function Settings() {
           </div>
           <Field
             label="PARES A OPERAR (coma-separados, o escribe 'auto')"
-            help="Qué monedas vigila. 'auto' = todos los pares MXN de Bitso · escríbelos (btc_mxn,eth_mxn) · vacío = según el perfil."
+            help="Qué monedas vigila. 'auto' = todos los pares MXN de Binance · escríbelos (btc_mxn,eth_mxn) · vacío = según el perfil."
           >
             <input
               className="pixel-input"
@@ -233,7 +233,7 @@ export default function Settings() {
             />
           </Field>
           <p className="muted mb" style={{ fontSize: 16 }}>
-            <b>auto</b> = todos los pares contra MXN de Bitso · vacío = según el perfil. Cualquier cripto con par en MXN funciona.
+            <b>auto</b> = todos los pares contra MXN de Binance · vacío = según el perfil. Cualquier cripto con par en MXN funciona.
           </p>
           <Field
             label="ESCALERA DCA · Nº DE NIVELES"

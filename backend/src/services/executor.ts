@@ -46,15 +46,15 @@ const rotateCooldown = new Map<string, number>();
 // Tras un reinicio, las instrucciones que quedaron "en proceso" se recuperan una vez.
 let recoveredProcessing = false;
 
-// Cuando Bitso bloquea por límites de cuenta (código 0507), dejamos de intentar
-// operaciones por un rato para no spamear peticiones (el arreglo es del usuario: subir nivel en Bitso).
+// Cuando el exchange bloquea por límites de cuenta, dejamos de intentar
+// operaciones por un rato para no spamear peticiones.
 let accountBlockedUntil = 0;
 let accountBlockNoticeAt = 0;
 
-/** ¿El error es un bloqueo por límites de cuenta de Bitso? */
+/** ¿El error es un bloqueo por límites de cuenta del exchange? */
 function isAccountLimitError(err: unknown): boolean {
   const e = err as any;
-  return e?.bitsoCode === '0507' || /allowed balance|funds protection|exceed your total/i.test(String(e?.message ?? ''));
+  return /allowed balance|funds protection|exceed your total|insufficient/i.test(String(e?.message ?? ''));
 }
 
 /**
@@ -71,7 +71,7 @@ async function rotateToFund(
 ): Promise<string | null> {
   const lastT = rotateCooldown.get(userId) ?? 0;
   if (Date.now() - lastT < 180_000) return null; // máx. 1 rotación cada 3 min
-  if (Date.now() < accountBlockedUntil) return null; // Bitso bloqueado por límites de cuenta
+  if (Date.now() < accountBlockedUntil) return null; // exchange bloqueado por límites de cuenta
 
   // Anti-churn: cada rotación cuesta spread + comisión. Tope de rotaciones por hora.
   const rotKey = `rot:${userId}:${new Date().getHours()}`;
@@ -132,7 +132,7 @@ async function rotateToFund(
         accountBlockNoticeAt = Date.now();
         await logEvent(
           userId,
-          '⛔ Bitso BLOQUEA operar por límites de cuenta (nivel 1). Sube tu verificación en Bitso (INE + comprobante de domicilio) para aumentar límites y que el bot pueda operar.',
+          '⛔ El exchange bloqueó la operación por límites de cuenta. Revisa tu cuenta en Binance.',
           'error',
         ).catch(() => {});
       }
@@ -148,16 +148,8 @@ async function rotateToFund(
  * Corre seguido (p. ej. cada 20-30s) y es barato.
  */
 export async function runExecutorAll(): Promise<void> {
-  const users0 = await prisma.user.findMany({
-    where: {
-      tradingEnabled: true,
-      OR: [
-        { bitsoApiKey: { not: null }, bitsoApiSecret: { not: null } },
-        { exchange: 'binance' },
-      ],
-    },
-  });
-  // Construye el cliente del exchange de cada usuario (Bitso o Binance).
+  const users0 = await prisma.user.findMany({ where: { tradingEnabled: true } });
+  // Construye el cliente de Binance de cada usuario.
   const clients = new Map<string, ExchangeClient>();
   const users: typeof users0 = [];
   for (const u of users0) {
@@ -244,9 +236,9 @@ export async function runExecutorAll(): Promise<void> {
   const availOf = (userId: string, symbol: string): number =>
     balMap.get(userId)?.get(symbol.split('_')[0])?.avail ?? 0;
 
-  // AUTO-SANACIÓN: sincroniza TODAS las posiciones con el saldo REAL de Bitso.
+  // AUTO-SANACIÓN: sincroniza TODAS las posiciones con el saldo REAL del exchange.
   // (Las comisiones/los precios de llenado desfasan la cantidad estimada; sin esto
-  //  el bot intentaría vender más de lo que tiene y Bitso daría 0379 Insufficient balance.)
+  //  el bot intentaría vender más de lo que tiene y el exchange daría insufficient balance.)
   for (const u of users) {
     const cmap = balMap.get(u.id);
     if (!cmap) continue;
@@ -356,7 +348,7 @@ export async function runExecutorAll(): Promise<void> {
           accountBlockNoticeAt = Date.now();
           await logEvent(
             user.id,
-            '⛔ Bitso BLOQUEA operar por límites de cuenta (nivel 1). Sube tu verificación en Bitso (INE + comprobante de domicilio) para aumentar límites.',
+            '⛔ El exchange bloqueó la operación por límites de cuenta. Revisa tu cuenta.',
             'error',
           ).catch(() => {});
         }

@@ -60,7 +60,7 @@ export default function Login() {
         </div>
       </Panel>
       <div className="muted center mt" style={{ fontFamily: 'var(--font-pixel)', fontSize: 8 }}>
-        AUTOMATIZA TUS GANANCIAS EN BITSO
+        AUTOMATIZA TUS GANANCIAS EN BINANCE
       </div>
     </div>
   );

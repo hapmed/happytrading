@@ -262,7 +262,7 @@ export async function userRoutes(app: FastifyInstance) {
     });
   });
 
-  // Movimientos (depósitos/retiros): los registrados + los reales de Bitso (para verificar el PnL).
+  // Movimientos (depósitos/retiros) registrados (para verificar el PnL).
   app.get('/movements', { preHandler: [authenticate] }, async (req) => {
     const recorded = await prisma.deposit.findMany({
       where: { userId: req.user.sub },
@@ -294,7 +294,7 @@ export async function userRoutes(app: FastifyInstance) {
     if (!user || !hasExchangeCreds(user)) return reply.code(400).send({ error: 'Exchange no configurado' });
     const client = await makeExchangeClient(user);
     if (!client) return reply.code(400).send({ error: 'Exchange no configurado' });
-    const exch = (user.exchange ?? 'bitso').toLowerCase() === 'binance' ? 'binance' : 'bitso';
+    const exch = 'binance';
     const limits = await getBookLimits(client, exch).catch(() => new Map<string, any>());
     const body = (req.body ?? {}) as { convert?: string };
     const toMxn = (body.convert ?? 'vault').toLowerCase() === 'mxn';
@@ -316,7 +316,7 @@ export async function userRoutes(app: FastifyInstance) {
         const price = Number(t.last ?? 0);
         const lim = limits.get(p.symbol);
         if (lim && (qty < lim.minimumAmount || qty * price < lim.minimumValue)) {
-          results.push({ symbol: p.symbol, skipped: 'bajo el mínimo de Bitso' });
+          results.push({ symbol: p.symbol, skipped: 'bajo el mínimo del exchange' });
           continue;
         }
         const order = await client.placeOrder({ book: p.symbol, side: 'sell', type: 'market', major: String(qty) });

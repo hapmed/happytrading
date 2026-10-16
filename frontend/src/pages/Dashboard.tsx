@@ -82,7 +82,7 @@ export default function Dashboard() {
 
         {balances.length > 0 && (
           <div className="dash-full">
-            <Panel title="◈ SALDO EN BITSO">
+            <Panel title="◈ SALDO EN BINANCE">
               <div className="stat-grid" style={{ marginBottom: 0 }}>
                 {balances
                   .filter((b) => ['mxn', 'btc', 'eth', 'usdc', 'usdt', 'xrp', 'sol', 'trx'].includes(String(b.currency).toLowerCase()))

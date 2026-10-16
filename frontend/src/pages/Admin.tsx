@@ -191,7 +191,7 @@ export default function Admin() {
                 <tr>
                   <th>EMAIL</th>
                   <th>ROL</th>
-                  <th>BITSO</th>
+                  <th>API</th>
                   <th>ESTADO</th>
                   <th>ACCIONES</th>
                 </tr>
