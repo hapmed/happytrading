@@ -22,7 +22,7 @@ const SYMBOLS: Record<string, string[]> = {
     'imx_mxn', 'dydx_mxn', 'gmx_mxn', 'arb_mxn', 'op_mxn', 'sei_mxn', 'tia_mxn', 'wld_mxn', 'jup_mxn', 'pyth_mxn',
   ],
 };
-const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.6, aggressive: 0.45 };
+const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.55, aggressive: 0.3 };
 const DEFAULT_ORDER_MXN = 200;
 const PLAN_TTL_H = 8; // validez de cada instrucción
 
@@ -634,8 +634,8 @@ async function planForUser(userId: string): Promise<void> {
       const spread0 = mid0 > 0 && ask0 > bid0 ? ((ask0 - bid0) / mid0) * 100 : 0;
       const cheapEnough =
         indicators &&
-        (indicators.stat === 'BARATO' || Number(indicators.bbPos) <= 30 || Number(indicators.zScore) <= -0.6);
-      if (cheapEnough && signal.action === 'HOLD' && spread0 <= 1.2 && last > 0) {
+        (indicators.stat === 'BARATO' || Number(indicators.bbPos) <= 45 || Number(indicators.zScore) <= -0.25);
+      if (cheapEnough && signal.action === 'HOLD' && spread0 <= 2 && last > 0) {
         signal.action = 'BUY';
         signal.confidence = Math.max(signal.confidence, 0.6);
         signal.reasoning = `BARATO z=${indicators.zScore} RSI=${indicators.rsi} (estadística)`;
@@ -674,10 +674,31 @@ async function planForUser(userId: string): Promise<void> {
           await logEvent(userId, `Compra bloqueada por régimen RISK_OFF · ${symbol}`, 'warn');
           continue;
         }
-        let size =
-          stopLossPct > 0 ? fixedFractionalSize(equityMxn, riskPct, stopLossPct) / quoteToMxn : maxOrder;
-        if (!isFinite(size) || size <= 0) size = maxOrder;
-        let spend = Math.min(maxOrder, size, cashRemaining);
+
+        // ── ESTADÍSTICA (modo AGRESIVO): Valor Esperado + Kelly ───────────
+        const z = Number(indicators?.zScore ?? 0);
+        const bidT = Number(ticker.bid ?? 0);
+        const askT = Number(ticker.ask ?? 0);
+        const midT = bidT > 0 && askT > 0 ? (bidT + askT) / 2 : last;
+        const spreadPPct = midT > 0 && askT > bidT ? ((askT - bidT) / midT) * 100 : 0;
+        const pWin = Math.min(0.82, Math.max(0.4, 0.5 - z * 0.12)); // más barato → más probable
+        const tpE = takeProfitPct > 0 ? takeProfitPct : 1.5;
+        const slE = stopLossPct > 0 ? stopLossPct : 1.5;
+        const evPct = pWin * tpE - (1 - pWin) * slE;
+        if (evPct <= 0.05) {
+          await logEvent(userId, `🧮 ${symbol}: EV ${evPct.toFixed(2)}% ≤ 0 (p=${(pWin * 100).toFixed(0)}%) → no conviene`, 'info');
+          continue;
+        }
+        const b = slE > 0 ? tpE / slE : 1;
+        const kelly = b > 0 ? Math.max(0, (pWin * b - (1 - pWin)) / b) : 0;
+        await logEvent(
+          userId,
+          `🧮 ${symbol}: EV +${evPct.toFixed(2)}% · p=${(pWin * 100).toFixed(0)}% · Kelly ${(kelly * 100).toFixed(0)}% · spread ${spreadPPct.toFixed(2)}% → COMPRO`,
+          'ok',
+        );
+        // SIZING AGRESIVO: usar todo el margen disponible (hasta maxOrder).
+        const size = maxOrder;
+        let spend = Math.min(maxOrder, cashRemaining);
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
 
         // Respetar mínimos del exchange (monto y valor por orden) antes de crear el plan
