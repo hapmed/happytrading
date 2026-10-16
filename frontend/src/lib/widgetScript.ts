@@ -57,6 +57,12 @@ async function makeSmall(d, gain, wolf) {
   p.centerAlignText();
   p.lineLimit = 1;
   p.minimumScaleFactor = 0.5;
+  const v = col.addText((gain ? "+" : "-") + money(d.pnl));
+  v.font = Font.systemFont(11);
+  v.textColor = new Color(gain ? "#00ff9d" : "#ff4d4d");
+  v.centerAlignText();
+  v.lineLimit = 1;
+  v.minimumScaleFactor = 0.6;
   w.addSpacer();
   return w;
 }
@@ -71,7 +77,7 @@ async function makeMedium(d, gain, wolf, mood) {
   const t = left.addText("HAPPYTRADING 🐺"); t.font = Font.boldSystemFont(9); t.textColor = new Color("#00ff9d");
   const lbl = left.addText(gain ? "▲ GANANCIA" : "▼ PÉRDIDA"); lbl.font = Font.systemFont(8); lbl.textColor = new Color("#7984a6");
   const big = left.addText((gain ? "+" : "-") + money(d.pnl)); big.font = Font.boldMonospacedSystemFont(22); big.textColor = new Color(gain ? "#00ff9d" : "#ff4d4d"); big.lineLimit = 1; big.minimumScaleFactor = 0.5;
-  const sub = left.addText(pct(d.pnlPct) + "  ·  " + money(d.currentValue)); sub.font = Font.systemFont(8); sub.textColor = new Color("#00e5ff"); sub.lineLimit = 1;
+  const sub = left.addText(pct(d.pnlPct) + "  ·  " + (gain ? "+" : "-") + money(d.pnl) + "  ·  " + money(d.currentValue)); sub.font = Font.systemFont(8); sub.textColor = new Color("#00e5ff"); sub.lineLimit = 1;
   const ph = left.addText("“" + pick(mood) + "”"); ph.font = Font.systemFont(8); ph.textColor = new Color("#ffe600"); ph.lineLimit = 2;
   row.addSpacer(6);
   if (wolf) { const im = row.addImage(wolf); im.imageSize = new Size(58, 70); }
@@ -86,7 +92,7 @@ async function makeLarge(d, gain, wolf, mood) {
   w.addSpacer(8);
   const lbl = w.addText(gain ? "▲ GANANCIA TOTAL" : "▼ PÉRDIDA TOTAL"); lbl.font = Font.systemFont(10); lbl.textColor = new Color("#7984a6"); lbl.centerAlignText();
   const big = w.addText((gain ? "+" : "-") + money(d.pnl)); big.font = Font.boldMonospacedSystemFont(34); big.textColor = new Color(gain ? "#00ff9d" : "#ff4d4d"); big.centerAlignText(); big.lineLimit = 1; big.minimumScaleFactor = 0.4;
-  const p = w.addText(pct(d.pnlPct)); p.font = Font.systemFont(12); p.textColor = new Color(gain ? "#00ff9d" : "#ff4d4d"); p.centerAlignText();
+  const p = w.addText(pct(d.pnlPct) + "  ·  " + (gain ? "+" : "-") + money(d.pnl)); p.font = Font.systemFont(12); p.textColor = new Color(gain ? "#00ff9d" : "#ff4d4d"); p.centerAlignText();
   w.addSpacer(6);
   const sub = w.addText("Valor: " + money(d.currentValue) + "  ·  Invertido: " + money(d.invested)); sub.font = Font.systemFont(9); sub.textColor = new Color("#00e5ff"); sub.centerAlignText(); sub.lineLimit = 1; sub.minimumScaleFactor = 0.6;
   const z = w.addText("Régimen: " + (d.zone || "—")); z.font = Font.systemFont(9); z.textColor = new Color("#7984a6"); z.centerAlignText();
