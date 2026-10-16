@@ -462,14 +462,13 @@ async function planForUser(userId: string): Promise<void> {
   let minViable = Number.POSITIVE_INFINITY;
   for (const s of symbols) {
     const lim = limits.get(s);
-    if (lim?.minimumValue) minViable = Math.min(minViable, lim.minimumValue);
+    if (lim?.minimumValue && lim.minimumValue > 0) minViable = Math.min(minViable, lim.minimumValue);
   }
-  if (!isFinite(minViable)) minViable = 5;
-  minViable = Math.max(minViable, 1);
+  if (!isFinite(minViable) || minViable <= 0) minViable = quote === 'usdt' ? 1 : 10;
   if (cashRemaining < minViable && cryptoValue <= 0.000001) {
     await logEvent(
       userId,
-      `⏸ Sin fondos para operar (caja $${cashRemaining.toFixed(2)} · mínimo $${minViable.toFixed(2)}) — IA en pausa para ahorrar tokens`,
+      `⏸ Sin fondos para operar (caja $${cashRemaining.toFixed(2)} · mínimo $${minViable.toFixed(2)} · ${symbols.length} pares) — IA en pausa para ahorrar tokens`,
       'warn',
     );
     await setState(userId, 'idle', 'Sin fondos · IA en pausa');
