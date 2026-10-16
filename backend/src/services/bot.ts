@@ -230,6 +230,32 @@ async function planForUser(userId: string): Promise<void> {
     .map((b: any) => String(b.currency).toLowerCase());
   const symbols = await resolveSymbols(user.symbols, profile, client, heldCurrencies);
 
+  // Reconciliación: las monedas que el usuario YA tenía (capital inicial/depósitos)
+  // deben registrarse como Position para que el ejecutor pueda aplicarles SL/TP y
+  // rotarlas para fondear compras. Sin esto, quedaban "invisibles" y bloqueadas.
+  for (const b of balances) {
+    const cur = String(b.currency).toLowerCase();
+    if (cur === 'mxn') continue;
+    const amount = Number(b.total ?? 0);
+    if (amount <= 0) continue;
+    const sym = `${cur}_mxn`;
+    const existing = await prisma.position.findUnique({ where: { userId_symbol: { userId, symbol: sym } } });
+    if (existing) continue;
+    try {
+      const t = await client.ticker(sym);
+      const price = Number(t.last ?? 0);
+      const value = amount * price;
+      const lim = limits.get(sym);
+      // Solo monedas con par MXN válido y valor por encima del mínimo vendible.
+      if (price <= 0 || (lim && (amount < lim.minimumAmount || value < lim.minimumValue))) continue;
+      if (value < 5) continue; // ignora polvo
+      await prisma.position.create({
+        data: { userId, symbol: sym, baseAmount: String(amount), avgCostMxn: String(price) },
+      });
+      await logEvent(userId, `📌 Posición registrada ${sym} (${amount.toFixed(6)}) al precio actual — capital previo`, 'info');
+    } catch {}
+  }
+
   const botSetting = await prisma.setting.findUnique({ where: { key: 'bot' } });
   const regimeFilter = (botSetting?.value as any)?.regimeFilter !== false;
   let regime: Awaited<ReturnType<typeof getRegime>> | null = null;

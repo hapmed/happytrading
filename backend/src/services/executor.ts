@@ -73,14 +73,23 @@ async function rotateToFund(
 
   try {
     rotateCooldown.set(userId, Date.now());
-    const placed = await client.placeOrder({ book: best.symbol, side: 'sell', type: 'market', major: roundStr(best.qty, 8) });
+    // Vender solo lo necesario para fondear (venta parcial) si cumple los mínimos;
+    // si no, vender la posición completa.
+    const price = best.price;
+    const lim = limits.get(best.symbol);
+    let sellQty = needMxn > 0 && price > 0 ? Math.min(best.qty, (needMxn / price) * 1.05) : best.qty;
+    if (lim && (sellQty < lim.minimumAmount || sellQty * price < lim.minimumValue)) {
+      if (best.qty >= lim.minimumAmount && best.qty * price >= lim.minimumValue) sellQty = best.qty;
+      else return null;
+    }
+    const placed = await client.placeOrder({ book: best.symbol, side: 'sell', type: 'market', major: roundStr(sellQty, 8) });
     await prisma.trade.create({
       data: {
-        userId, symbol: best.symbol, side: 'SELL', amount: roundStr(best.qty, 8), price: String(best.price),
+        userId, symbol: best.symbol, side: 'SELL', amount: roundStr(sellQty, 8), price: String(best.price),
         status: 'PENDING', source: 'AI', reason: 'Rotar para fondear compra', externalId: placed?.oid ? String(placed.oid) : null,
       },
     });
-    await applyPosition(userId, best.symbol, 'SELL', best.qty, best.price);
+    await applyPosition(userId, best.symbol, 'SELL', sellQty, best.price);
     return best.symbol;
   } catch {
     return null;
