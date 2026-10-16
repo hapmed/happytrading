@@ -1909,3 +1909,12 @@ a:hover {
 .pot-info > div { display: flex; flex-direction: column; }
 .pot-info b { font-family: var(--font-pixel); font-size: 13px; color: var(--text); }
 .pot-progress { font-family: var(--font-pixel); font-size: 9px; color: var(--yellow); margin-top: 4px; }
+
+/* ── Señales: resumen + eficiencia ────────────────────────────────── */
+.sig-summary {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--cyan);
+  margin-bottom: 8px;
+}
+.sig-summary b { font-family: var(--font-pixel); font-size: 11px; color: var(--green); }
