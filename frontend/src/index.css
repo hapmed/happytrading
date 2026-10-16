@@ -321,6 +321,53 @@ a:hover {
 .pnl-hero.gain { animation: heroGlowGreen 2.6s ease-in-out infinite; }
 .pnl-hero.loss { animation: heroGlowRed 2.6s ease-in-out infinite; }
 
+/* ---------- Barra EN VIVO (trabajando para ti) ---------- */
+.livebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  margin-bottom: 18px;
+  border: 3px solid var(--panel-border);
+  background: var(--panel);
+  box-shadow: 4px 4px 0 var(--panel-shadow);
+  position: sticky;
+  top: 8px;
+  z-index: 40;
+}
+.livebar.on { border-color: var(--green); box-shadow: 4px 4px 0 #005536, 0 0 24px rgba(0, 255, 157, 0.25); }
+.livebar.off { border-color: #3a3a44; }
+.livebar-led {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 12px var(--green);
+  animation: blink 1s steps(2) infinite;
+}
+.livebar.off .livebar-led { background: var(--red); box-shadow: 0 0 12px var(--red); }
+.livebar-title { font-family: var(--font-pixel); font-size: 8px; color: var(--green); }
+.livebar.off .livebar-title { color: var(--muted); }
+.livebar-state { font-family: var(--font-pixel); font-size: 8px; color: var(--cyan); animation: gainBlink 1.4s ease-in-out infinite; }
+.livebar-eq { display: flex; align-items: flex-end; gap: 3px; height: 16px; }
+.livebar-eq i { width: 4px; height: 6px; background: var(--green); animation: eq 0.9s ease-in-out infinite; }
+.livebar-next { margin-left: auto; font-family: var(--font-pixel); font-size: 8px; color: var(--yellow); }
+
+/* Todos los paneles "respiran" (siempre activo) */
+.pixel-panel { position: relative; }
+.pixel-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: 0 0 0 rgba(0, 229, 255, 0);
+  animation: panelBreath 6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes panelBreath {
+  0%, 100% { box-shadow: 0 0 0 rgba(0, 229, 255, 0); }
+  50% { box-shadow: 0 0 24px rgba(0, 229, 255, 0.16); }
+}
+.dash > *:nth-child(3n) .pixel-panel::after { animation-delay: 0.9s; }
+.dash > *:nth-child(3n + 2) .pixel-panel::after { animation-delay: 1.8s; }
+
 /* ---------- Panels ---------- */
 .pixel-panel {
   background: var(--panel);
