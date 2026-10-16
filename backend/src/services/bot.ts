@@ -494,6 +494,9 @@ async function planForUser(userId: string): Promise<void> {
   const ranked: Array<{ symbol: string; vol: number }> = [];
   for (const sym of symbols) {
     try {
+      // Solo pares que ALCANCEN con el efectivo disponible (evita planes imposibles)
+      const lim0 = limits.get(sym);
+      if (lim0 && lim0.minimumValue > cashRemaining) continue;
       const t = await client.ticker(sym);
       tickerCache.set(sym, t);
       const last = Number(t.last ?? 0);
@@ -648,7 +651,8 @@ async function planForUser(userId: string): Promise<void> {
           await logEvent(userId, `Compra bloqueada por régimen RISK_OFF · ${symbol}`, 'warn');
           continue;
         }
-        let size = stopLossPct > 0 ? fixedFractionalSize(equityMxn, riskPct, stopLossPct) : maxOrder;
+        let size =
+          stopLossPct > 0 ? fixedFractionalSize(equityMxn, riskPct, stopLossPct) / quoteToMxn : maxOrder;
         if (!isFinite(size) || size <= 0) size = maxOrder;
         let spend = Math.min(maxOrder, size, cashRemaining);
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
