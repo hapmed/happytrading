@@ -89,11 +89,15 @@ async function resolveSymbols(
   } catch {}
   const qBooks = books.filter((bk) => bk.endsWith(`_${quote}`));
   const validSet = new Set(books);
-  const def = (SYMBOLS[profile] ?? SYMBOLS.balanced).map((s) => s.replace('_mxn', `_${quote}`));
+  const def = (SYMBOLS[profile] ?? SYMBOLS.balanced)
+    .map((s) => s.replace('_mxn', `_${quote}`))
+    .filter((s) => !s.startsWith(`${quote}_`));
 
   let base: string[];
   if (c === 'auto') {
-    base = qBooks.length ? qBooks : def;
+    // 'auto' usa TODOS los pares, pero si son demasiados (Binance tiene cientos)
+    // usamos la lista del perfil para no saturar la API.
+    base = qBooks.length && qBooks.length <= 60 ? qBooks : def;
   } else if (c) {
     base = c.split(',').map((s) => s.trim()).filter(Boolean);
     // Solo pares válidos contra la moneda de cotización (MXN o USDT).

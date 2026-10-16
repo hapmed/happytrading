@@ -107,7 +107,7 @@ export class BinanceClient {
     const out: Array<{ book: string; minimumAmount: number; minimumValue: number; tickSize: number }> = [];
     for (const s of d.symbols ?? []) {
       if (s.status !== 'TRADING') continue;
-      if (String(s.quoteAsset).toUpperCase() !== 'MXN') continue;
+      if (String(s.quoteAsset).toUpperCase() !== this.quote.toUpperCase()) continue;
       const lot = (s.filters ?? []).find((f: any) => f.filterType === 'LOT_SIZE') ?? {};
       const notional = (s.filters ?? []).find((f: any) => f.filterType === 'NOTIONAL' || f.filterType === 'MIN_NOTIONAL') ?? {};
       const price = (s.filters ?? []).find((f: any) => f.filterType === 'PRICE_FILTER') ?? {};
