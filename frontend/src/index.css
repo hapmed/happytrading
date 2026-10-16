@@ -1626,3 +1626,28 @@ a:hover {
   line-height: 1.35;
   color: var(--muted);
 }
+
+/* ── Bóveda de ganancias ──────────────────────────────────────────── */
+.vault-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.vault-big { display: flex; flex-direction: column; gap: 4px; }
+.vault-big b { font-family: var(--font-pixel); font-size: 26px; color: var(--text); }
+.vault-pos { color: var(--green) !important; text-shadow: 0 0 10px rgba(0, 255, 157, 0.5); }
+.vault-meta { display: flex; gap: 18px; flex-wrap: wrap; }
+.vault-meta > div { display: flex; flex-direction: column; gap: 2px; }
+.vault-meta b { font-family: var(--font-pixel); font-size: 13px; color: var(--cyan); }
+.vault-chart {
+  width: 100%;
+  height: 160px;
+  display: block;
+  border: 2px solid var(--panel-border);
+  background: rgba(0, 0, 0, 0.25);
+  margin-bottom: 12px;
+}
+.vault-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.vault-help { font-family: var(--font-body); font-size: 16px; color: var(--muted); line-height: 1.35; flex: 1; min-width: 220px; }

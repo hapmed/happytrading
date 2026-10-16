@@ -57,20 +57,6 @@ export default function Settings() {
     }
   };
 
-  const payoutNow = async () => {
-    setBusy(true);
-    setErr('');
-    setMsg('');
-    try {
-      const r = await api('/me/payout', { method: 'POST', body: JSON.stringify({}) });
-      setMsg(`RETIRO SOLICITADO ✔ ${r?.withdrawal?.wid ? `(ID ${r.withdrawal.wid})` : ''}`);
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div>
       <h2 style={{ fontFamily: 'var(--font-pixel)', fontSize: 14, color: 'var(--green)' }} className="mb">
@@ -298,62 +284,6 @@ export default function Settings() {
               placeholder="ej. 2  (cada nivel −2% del precio)"
             />
           </Field>
-        </div>
-      </Panel>
-
-      <Panel title="◈ RETIRO DE GANANCIAS (SPEI)">
-        <p className="muted" style={{ fontSize: 16 }}>
-          Separa tus ganancias: el bot tradea solo con tu <b>capital de trabajo</b> y lo que gane por encima se puede
-          transferir a tu banco por SPEI. Bitso puede pedirte confirmar con PIN/OTP.
-        </p>
-        <Field label="CLABE INTERBANCARIA (18 dígitos)" help="Cuenta destino de las ganancias.">
-          <input
-            className="pixel-input"
-            defaultValue={user?.payoutClabe ?? ''}
-            onBlur={(e) => updatePref({ payoutClabe: e.target.value.replace(/\D/g, '') })}
-            placeholder="014580140494367822"
-          />
-        </Field>
-        <Field label="BENEFICIARIO (nombre del titular destino)" help="Debe coincidir con el titular de la cuenta.">
-          <input
-            className="pixel-input"
-            defaultValue={user?.payoutBeneficiary ?? ''}
-            onBlur={(e) => updatePref({ payoutBeneficiary: e.target.value })}
-            placeholder="Hector Pena"
-          />
-        </Field>
-        <Field label="BANCO (para identificarlo)" help="Solo informativo.">
-          <input
-            className="pixel-input"
-            defaultValue={user?.payoutBank ?? ''}
-            onBlur={(e) => updatePref({ payoutBank: e.target.value })}
-            placeholder="Santander"
-          />
-        </Field>
-        <Field
-          label="CAPITAL DE TRABAJO (MXN)"
-          help="El bot opera solo con esto. Lo que gane por encima es 'ganancia retirable'."
-        >
-          <input
-            className="pixel-input"
-            type="number"
-            defaultValue={user?.workingCapitalMxn ?? user?.initialCapital ?? ''}
-            onBlur={(e) => {
-              const v = parseFloat(e.target.value);
-              if (v >= 0) updatePref({ workingCapitalMxn: v });
-            }}
-            placeholder="ej. 100"
-          />
-        </Field>
-        <Toggle
-          label="RETIRO AUTOMÁTICO DE GANANCIAS"
-          checked={!!user?.payoutEnabled}
-          onChange={(v) => updatePref({ payoutEnabled: v })}
-        />
-        <div className="row" style={{ gap: 10, marginTop: 12 }}>
-          <PixelButton className="small" onClick={payoutNow} disabled={busy}>
-            💸 RETIRAR GANANCIAS AHORA
-          </PixelButton>
         </div>
       </Panel>
     </div>

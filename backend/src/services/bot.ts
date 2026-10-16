@@ -291,8 +291,27 @@ async function planForUser(userId: string): Promise<void> {
     await logEvent(userId, `Régimen: ${regime.zone} (${regime.score}/100)`, regime.zone === 'RISK_OFF' ? 'warn' : 'info');
   }
 
-  // Efectivo disponible que se irá repartiendo entre los pares (no sobre-comprometer)
-  let cashRemaining = Math.max(0, mxnAvailable - equityMxn * (cashReservePct / 100));
+  // ── Bóveda de ganancias ────────────────────────────────────────────
+  // El bot opera SOLO con el capital invertido (capital inicial + depósitos).
+  // Todo lo que se gane por encima queda RESERVADO en pesos, NO se reinvierte,
+  // para que sea fácil de retirar cuando quieras.
+  const deps = await prisma.deposit.findMany({ where: { userId } });
+  const netDeposits = deps.reduce(
+    (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
+    0,
+  );
+  const workingCapital = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
+  const cryptoValue = Math.max(0, equityMxn - mxnAvailable);
+  const profitReserve = Math.max(0, equityMxn - workingCapital);
+  const reservePct = equityMxn * (cashReservePct / 100);
+  // Efectivo disponible para operar, sin tocar la bóveda de ganancias.
+  let cashRemaining = Math.max(
+    0,
+    Math.min(mxnAvailable - profitReserve - reservePct, workingCapital - cryptoValue),
+  );
+  if (profitReserve > 0.5) {
+    await logEvent(userId, `💰 Ganancias acumuladas: $${profitReserve.toFixed(2)} MXN (reservadas, no se reinvierten)`, 'info');
+  }
 
   // ⚡ Selección VOLÁTIL: mide el movimiento (ticker) y se queda con las N más volátiles.
   const tickerCache = new Map<string, any>();

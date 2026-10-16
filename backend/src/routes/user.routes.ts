@@ -337,8 +337,8 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
-  // Información de retiro (Plan B): cuánto puedes retirar y a qué cuenta, para hacerlo manual.
-  app.get('/payout-info', { preHandler: [authenticate] }, async (req) => {
+  // Bóveda de ganancias: cuánto se ha acumulado desde el último retiro + historial (gráfica).
+  app.get('/vault', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
     const deps = await prisma.deposit.findMany({ where: { userId: req.user.sub } });
     const netDeposits = deps.reduce(
@@ -346,6 +346,8 @@ export async function userRoutes(app: FastifyInstance) {
       0,
     );
     const invested = (user?.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
+    const basePnl = user?.vaultBasePnl ? Number(user.vaultBasePnl) : 0;
+
     let currentValue = 0;
     let availableMxn = 0;
     try {
@@ -354,21 +356,69 @@ export async function userRoutes(app: FastifyInstance) {
       const mxnHolding = (live.holdings ?? []).find((h: any) => String(h.currency).toLowerCase() === 'mxn');
       availableMxn = mxnHolding ? Number(mxnHolding.valueMxn) : 0;
     } catch {}
-    const workingCapital = user?.workingCapitalMxn ? Number(user.workingCapitalMxn) : invested;
-    const profit = Math.max(0, currentValue - Math.max(workingCapital, invested));
+
+    const pnl = currentValue - invested;
+    const vault = Math.max(0, pnl - basePnl);
+
+    // Historial de la bóveda (para la gráfica): a partir de los snapshots del portafolio.
+    const rows = await prisma.portfolioSnapshot.findMany({
+      where: { userId: req.user.sub },
+      orderBy: { capturedAt: 'asc' },
+      take: 300,
+    });
+    const history = rows.map((r) => ({
+      t: r.capturedAt,
+      v: Math.max(0, Number(r.totalMxn) - invested - basePnl),
+    }));
+    history.push({ t: new Date(), v: vault });
+
     return {
-      enabled: !!user?.payoutEnabled,
-      clabe: user?.payoutClabe ?? null,
-      beneficiary: user?.payoutBeneficiary ?? null,
-      bank: user?.payoutBank ?? null,
+      vault,
+      pnl,
       invested,
       currentValue,
-      workingCapital,
-      profit,
       availableMxn,
-      // Lo que se puede retirar ahora mismo (caja disponible, hasta la ganancia).
-      withdrawableNow: Math.max(0, Math.min(profit, availableMxn)),
+      // Puedes retirar hasta la bóveda (o lo que haya en caja, lo que sea menor).
+      withdrawableNow: Math.max(0, Math.min(vault, availableMxn)),
+      history,
     };
+  });
+
+  // "Ya retiré": registra el retiro y REINICIA la bóveda a 0.
+  app.post('/vault/withdraw', { preHandler: [authenticate] }, async (req) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (!user) return { ok: false };
+    const body = (req.body ?? {}) as { amount?: number };
+    const deps = await prisma.deposit.findMany({ where: { userId: user.id } });
+    const netDeposits = deps.reduce(
+      (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
+      0,
+    );
+    const invested = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
+    const basePnl = user.vaultBasePnl ? Number(user.vaultBasePnl) : 0;
+    let currentValue = 0;
+    try {
+      currentValue = (await getLiveValuation(user.id)).currentValue;
+    } catch {}
+    const pnl = currentValue - invested;
+    const vault = Math.max(0, pnl - basePnl);
+    const amount = body.amount && body.amount > 0 ? Math.min(body.amount, vault) : vault;
+    if (amount > 0) {
+      await prisma.deposit.create({
+        data: {
+          userId: user.id,
+          currency: 'mxn',
+          amount: String(Math.round(amount * 100) / 100),
+          kind: 'WITHDRAWAL',
+          note: 'retiro de la bóveda de ganancias',
+        },
+      });
+    }
+    // Reinicia la bóveda: la ganancia acumulada vuelve a 0 desde ahora.
+    // (Al registrar el retiro, el capital invertido baja, así que el nuevo PnL sube por `amount`.)
+    const newBasePnl = pnl + (amount > 0 ? amount : 0);
+    await prisma.user.update({ where: { id: user.id }, data: { vaultBasePnl: String(newBasePnl) } });
+    return { ok: true, withdrawn: amount };
   });
 
   // Retiro de ganancias por SPEI a la CLABE configurada.
