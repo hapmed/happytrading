@@ -152,14 +152,16 @@ a:hover {
   flex: 1;
 }
 
-/* ---------- Dashboard en cuadrícula (lleno en PC, 1 columna en móvil) ---------- */
+/* ---------- Dashboard: columna única centrada (sin huecos en PC ni móvil) ---------- */
 .dash {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 18px;
-  align-items: start;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
 }
-.dash-full { grid-column: 1 / -1; min-width: 0; }
+.dash-full { width: 100%; min-width: 0; }
 .dash .pixel-panel { margin-bottom: 0; }
 .dash > * { min-width: 0; }
 

@@ -100,12 +100,12 @@ export default function Dashboard() {
           </div>
         )}
 
-        <Positions />
         <MarketThermometer />
+        <Positions />
         <Instructions />
-        <Usage />
         <RecentTrades trades={trades} />
         <Signals signals={signals} />
+        <Usage />
 
         <div className="dash-full">
           <BotActivity />
