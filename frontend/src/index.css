@@ -321,23 +321,14 @@ a:hover {
 .pnl-hero.gain { animation: heroGlowGreen 2.6s ease-in-out infinite; }
 .pnl-hero.loss { animation: heroGlowRed 2.6s ease-in-out infinite; }
 
-/* ---------- Barra EN VIVO (trabajando para ti) ---------- */
+/* ---------- Barra EN VIVO (dentro del panel de estado) ---------- */
 .livebar {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 11px 14px;
-  margin-bottom: 18px;
-  border: 3px solid var(--panel-border);
-  background: var(--panel);
-  box-shadow: 4px 4px 0 var(--panel-shadow);
-  position: sticky;
-  top: 8px;
-  z-index: 40;
+  padding: 2px 2px 12px;
 }
-.livebar.on { border-color: var(--green); box-shadow: 4px 4px 0 #005536, 0 0 24px rgba(0, 255, 157, 0.25); }
-.livebar.off { border-color: #3a3a44; }
 .livebar-led {
   width: 12px; height: 12px; border-radius: 50%;
   background: var(--green); box-shadow: 0 0 12px var(--green);
@@ -350,6 +341,9 @@ a:hover {
 .livebar-eq { display: flex; align-items: flex-end; gap: 3px; height: 16px; }
 .livebar-eq i { width: 4px; height: 6px; background: var(--green); animation: eq 0.9s ease-in-out infinite; }
 .livebar-next { margin-left: auto; font-family: var(--font-pixel); font-size: 8px; color: var(--yellow); }
+
+.statuspanel.auto-on { border-color: var(--green); }
+.statuspanel.auto-off { border-color: #3a3a44; }
 
 /* Todos los paneles "respiran" (siempre activo) */
 .pixel-panel { position: relative; }

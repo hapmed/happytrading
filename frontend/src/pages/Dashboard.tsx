@@ -6,13 +6,12 @@ import { sfxCoin } from '../lib/sfx';
 import { Panel, Stat } from '../components/Retro';
 import BotActivity from '../components/BotActivity';
 import Portfolio from '../components/Portfolio';
-import AutoStatus from '../components/AutoStatus';
+import StatusBox from '../components/StatusBox';
 import Positions from '../components/Positions';
 import Instructions from '../components/Instructions';
 import Usage from '../components/Usage';
 import RecentTrades from '../components/RecentTrades';
 import Signals from '../components/Signals';
-import LiveBar from '../components/LiveBar';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -67,11 +66,9 @@ export default function Dashboard() {
       )}
       {error && <div className="error-msg">{error}</div>}
 
-      <LiveBar />
-
       <div className="dash">
         <div className="dash-full">
-          <AutoStatus />
+          <StatusBox />
         </div>
         <div className="dash-full">
           <Portfolio />
