@@ -790,6 +790,40 @@ a:hover {
 .pnl-up { color: var(--green); font-family: var(--font-pixel); font-size: 10px; }
 .pnl-down { color: var(--red); font-family: var(--font-pixel); font-size: 10px; }
 
+/* ---------- Mis posiciones (tarjetas responsive) ---------- */
+.pos-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+}
+.pos-card {
+  border: 3px solid var(--panel-border);
+  background: var(--bg2);
+  padding: 12px;
+  box-shadow: 4px 4px 0 var(--panel-shadow);
+  min-width: 0;
+}
+.pos-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pos-top b {
+  color: var(--cyan);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+}
+.pos-detail {
+  font-family: var(--font-term);
+  font-size: 17px;
+  color: var(--muted);
+  margin-top: 5px;
+  word-break: break-word;
+}
+.pos-detail b { color: var(--text); }
+
 /* ---------- Código de Scriptable ---------- */
 .code-box {
   height: 340px;

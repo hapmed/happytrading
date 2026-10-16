@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Panel } from './Retro';
+import { Panel, Stat } from './Retro';
 
 function money(n: number) {
-  return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function base(symbol: string) {
+  return String(symbol).split('_')[0].toUpperCase();
 }
 
 export default function Positions() {
@@ -16,37 +19,51 @@ export default function Positions() {
     return () => clearInterval(id);
   }, []);
 
+  const totalValue = rows.reduce((s, r) => s + Number(r.valueMxn || 0), 0);
+  const totalPnl = rows.reduce((s, r) => s + Number(r.pnl || 0), 0);
+
   return (
-    <Panel title="◈ MIS POSICIONES (abiertas por el bot)">
+    <Panel title="◈ MIS POSICIONES">
+      <p className="muted mb" style={{ fontSize: 16 }}>
+        Monedas que el bot compró y <b>aún tienes</b> (sin vender). La ganancia es contra su costo de compra.
+      </p>
+
       {rows.length === 0 ? (
-        <div className="muted center">Aún no hay posiciones abiertas (el bot comprará cuando detecte oportunidad).</div>
+        <div className="muted center">Aún no hay posiciones abiertas.</div>
       ) : (
-        <table className="retro-table">
-          <thead>
-            <tr>
-              <th>PAR</th>
-              <th>CANTIDAD</th>
-              <th>COSTO</th>
-              <th>PRECIO</th>
-              <th>PnL</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.symbol}>
-                <td>{r.symbol}</td>
-                <td>{Number(r.baseAmount).toLocaleString('es-MX')}</td>
-                <td>${money(Number(r.avgCostMxn))}</td>
-                <td>${money(Number(r.priceMxn))}</td>
-                <td className={Number(r.pnl) >= 0 ? 'pnl-up' : 'pnl-down'}>
-                  {Number(r.pnl) >= 0 ? '+' : ''}${money(Number(r.pnl))} (
-                  {Number(r.pnlPct) >= 0 ? '+' : ''}
-                  {Number(r.pnlPct).toFixed(1)}%)
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <div className="stat-grid" style={{ marginBottom: 16 }}>
+            <Stat label="EN POSICIONES" value={`$${money(totalValue)}`} accent="cyan" />
+            <Stat label={totalPnl >= 0 ? 'GANANCIA' : 'PÉRDIDA'} value={`${totalPnl >= 0 ? '+' : '−'}$${money(Math.abs(totalPnl))}`} accent={totalPnl >= 0 ? 'green' : 'magenta'} />
+          </div>
+
+          <div className="pos-list">
+            {rows.map((r) => {
+              const pnl = Number(r.pnl || 0);
+              const pnlPct = Number(r.pnlPct || 0);
+              return (
+                <div className="pos-card" key={r.symbol}>
+                  <div className="pos-top">
+                    <b>{base(r.symbol)}</b>
+                    <span className={pnl >= 0 ? 'pnl-up' : 'pnl-down'}>
+                      {pnl >= 0 ? '+' : '−'}${money(Math.abs(pnl))} ({pnlPct >= 0 ? '+' : ''}
+                      {pnlPct.toFixed(1)}%)
+                    </span>
+                  </div>
+                  <div className="pos-detail">
+                    Cantidad: <b>{Number(r.baseAmount).toLocaleString('es-MX')}</b>
+                  </div>
+                  <div className="pos-detail">
+                    Costo: ${money(r.avgCostMxn)} · Precio: ${money(r.priceMxn)}
+                  </div>
+                  <div className="pos-detail">
+                    Valor ahora: ${money(r.valueMxn)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </Panel>
   );
