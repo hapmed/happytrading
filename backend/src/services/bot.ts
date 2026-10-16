@@ -409,25 +409,21 @@ async function planForUser(userId: string): Promise<void> {
 
   const cashReserveAmount = equityQuote * (cashReservePct / 100);
 
-  // ── BÓVEDA: guarda SOLO la ganancia REALIZADA (efectivo por encima del capital) ──
-  // Se convierte a MXN y se guarda en Funding. Una vez ahí, NO se toca (solo se retira a los $50).
+  // ── BÓVEDA: guarda TODA la ganancia REALIZADA en Funding (USDT estable, no varía) ──
+  // Se mueve cualquier excedente por encima del capital. Una vez ahí NO se toca.
   try {
     const funding = await (client as any).fundingBalance?.();
-    const fundingMxn = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-    const pendingMxn = Math.max(0, vaultMxn - fundingMxn); // lo que falta por guardar
-    // Efectivo por ENCIMA del capital = ganancia ya realizada (nunca tocamos el capital).
-    const realizedCashMxn = Math.max(0, (cashAvailable - investedQuote) * quoteToMxn);
-    const moveMxn = Math.min(pendingMxn, realizedCashMxn);
-    if (moveMxn >= 9 && quote !== 'mxn') {
-      const fromAmount = Number((moveMxn / quoteToMxn).toFixed(2));
-      if (fromAmount >= 0.5 && fromAmount <= cashAvailable) {
-        await (client as any).convert(quote.toUpperCase(), 'MXN', fromAmount);
-        await new Promise((r) => setTimeout(r, 2500));
-        const sp = await (client as any).spotBalance?.();
-        const mxnSpot = Number(sp?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-        if (mxnSpot >= 1) await (client as any).transfer('MAIN_FUNDING', 'MXN', Number(mxnSpot.toFixed(2)));
-        await logEvent(userId, `🏦 Bóveda: guardé $${moveMxn.toFixed(2)} MXN de ganancia (ya no se mueve de ahí)`, 'ok');
-      }
+    const fundingQuote = Number(funding?.find((b: any) => b.currency === quote)?.available ?? 0);
+    const realizedCash = Math.max(0, cashAvailable - investedQuote); // efectivo SOBRE tu capital
+    const pending = Math.max(0, realizedCash - fundingQuote);
+    if (pending >= 0.05) {
+      const move = Math.min(pending, cashAvailable);
+      await (client as any).transfer('MAIN_FUNDING', quote.toUpperCase(), Number(move.toFixed(4)));
+      await logEvent(
+        userId,
+        `🏦 Bóveda: guardé ${move.toFixed(4)} ${quote.toUpperCase()} (~$${(move * quoteToMxn).toFixed(2)} MXN) — ya no se mueve`,
+        'ok',
+      );
     }
   } catch (err) {
     await logEvent(userId, `No se pudo guardar en la bóveda: ${(err as Error).message.slice(0, 60)}`, 'warn');
@@ -440,23 +436,31 @@ async function planForUser(userId: string): Promise<void> {
       const payoutKey = `payout:${userId}:${new Date().toISOString().slice(0, 13)}`; // máx 1/hora
       if (!(await kv.get(payoutKey))) {
         const funding = await (client as any).fundingBalance?.();
-        const mxnVault = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-        if (mxnVault >= PAYOUT_MIN_MXN) {
-          const amount = Math.round(mxnVault * 100) / 100;
-          // Traer la bóveda (MXN) de Funding → Spot para el retiro SPEI.
-          await (client as any).transfer('FUNDING_MAIN', 'MXN', amount);
+        const fq = Number(funding?.find((b: any) => b.currency === quote)?.available ?? 0);
+        const vaultMxnEq = fq * quoteToMxn;
+        if (vaultMxnEq >= PAYOUT_MIN_MXN) {
+          const amount = Math.round(vaultMxnEq * 100) / 100;
+          // Traer la bóveda (USDT) de Funding → Spot, convertir a MXN y retirar por SPEI.
+          await (client as any).transfer('FUNDING_MAIN', quote.toUpperCase(), Number(fq.toFixed(4)));
           await new Promise((r) => setTimeout(r, 3000));
-          const w = await (client as any).fiatWithdrawMxn({
-            amountMxn: amount,
-            clabe: user.payoutClabe,
-            beneficiary: user.payoutBeneficiary,
-            bank: user.payoutBank ?? undefined,
-          });
-          await prisma.deposit.create({
-            data: { userId, currency: 'mxn', amount: String(amount), kind: 'WITHDRAWAL', note: `binance-spei:${w?.orderId ?? w?.id ?? 'retiro'}` },
-          });
-          await kv.set(payoutKey, '1', 3600);
-          await logEvent(userId, `🏦 Retiro automático a tu CLABE: $${amount.toFixed(2)} MXN`, 'ok');
+          await (client as any).convert(quote.toUpperCase(), 'MXN', Number(fq.toFixed(2)));
+          await new Promise((r) => setTimeout(r, 2500));
+          const sp = await (client as any).spotBalance?.();
+          const mxnSpot = Number(sp?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+          const send = Math.min(mxnSpot, amount);
+          if (send >= 50) {
+            const w = await (client as any).fiatWithdrawMxn({
+              amountMxn: Math.round(send * 100) / 100,
+              clabe: user.payoutClabe,
+              beneficiary: user.payoutBeneficiary,
+              bank: user.payoutBank ?? undefined,
+            });
+            await prisma.deposit.create({
+              data: { userId, currency: 'mxn', amount: String(Math.round(send * 100) / 100), kind: 'WITHDRAWAL', note: `binance-spei:${w?.orderId ?? w?.id ?? 'retiro'}` },
+            });
+            await kv.set(payoutKey, '1', 3600);
+            await logEvent(userId, `🏦 Retiro automático a tu CLABE: $${send.toFixed(2)} MXN`, 'ok');
+          }
         }
       }
     } catch (err) {
