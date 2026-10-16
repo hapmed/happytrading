@@ -13,6 +13,7 @@ import Usage from '../components/Usage';
 import RecentTrades from '../components/RecentTrades';
 import Signals from '../components/Signals';
 import MarketThermometer from '../components/MarketThermometer';
+import PayoutPanel from '../components/PayoutPanel';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -101,6 +102,7 @@ export default function Dashboard() {
         )}
 
         <MarketThermometer />
+        <PayoutPanel />
         <Positions />
         <Instructions />
         <RecentTrades trades={trades} />

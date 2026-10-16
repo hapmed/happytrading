@@ -337,6 +337,40 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // Información de retiro (Plan B): cuánto puedes retirar y a qué cuenta, para hacerlo manual.
+  app.get('/payout-info', { preHandler: [authenticate] }, async (req) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const deps = await prisma.deposit.findMany({ where: { userId: req.user.sub } });
+    const netDeposits = deps.reduce(
+      (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
+      0,
+    );
+    const invested = (user?.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
+    let currentValue = 0;
+    let availableMxn = 0;
+    try {
+      const live = await getLiveValuation(req.user.sub);
+      currentValue = live.currentValue;
+      const mxnHolding = (live.holdings ?? []).find((h: any) => String(h.currency).toLowerCase() === 'mxn');
+      availableMxn = mxnHolding ? Number(mxnHolding.valueMxn) : 0;
+    } catch {}
+    const workingCapital = user?.workingCapitalMxn ? Number(user.workingCapitalMxn) : invested;
+    const profit = Math.max(0, currentValue - Math.max(workingCapital, invested));
+    return {
+      enabled: !!user?.payoutEnabled,
+      clabe: user?.payoutClabe ?? null,
+      beneficiary: user?.payoutBeneficiary ?? null,
+      bank: user?.payoutBank ?? null,
+      invested,
+      currentValue,
+      workingCapital,
+      profit,
+      availableMxn,
+      // Lo que se puede retirar ahora mismo (caja disponible, hasta la ganancia).
+      withdrawableNow: Math.max(0, Math.min(profit, availableMxn)),
+    };
+  });
+
   // Retiro de ganancias por SPEI a la CLABE configurada.
   app.post('/payout', { preHandler: [authenticate] }, async (req, reply) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });

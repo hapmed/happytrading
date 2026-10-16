@@ -1585,3 +1585,44 @@ a:hover {
   .thermo-row { grid-template-columns: 48px 60px minmax(70px, 1fr) 62px; }
   .thermo-rsi, .thermo-mom { display: none; }
 }
+
+/* ── Panel de ganancias / retiro al banco ─────────────────────────── */
+.payout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.payout-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 2px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+.payout-stat b { font-family: var(--font-pixel); font-size: 14px; color: var(--text); }
+.payout-pos { color: var(--green) !important; }
+.payout-dest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 2px solid var(--cyan);
+  background: rgba(0, 229, 255, 0.06);
+  flex-wrap: wrap;
+}
+.payout-clabe {
+  font-family: var(--font-body);
+  font-size: 20px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+}
+.payout-help {
+  margin-top: 10px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.35;
+  color: var(--muted);
+}
