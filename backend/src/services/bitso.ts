@@ -118,4 +118,36 @@ export class BitsoClient {
     const data = await this.request<{ payload: any[] }>('GET', `/api/v3/withdrawals/?limit=${limit}`);
     return data.payload ?? [];
   }
+
+  // Métodos de retiro disponibles (para saber los campos requeridos de SPEI/CLABE).
+  async withdrawalMethods() {
+    const data = await this.request<{ payload: any[] }>('GET', '/api/v3/withdrawal_methods/');
+    return data.payload ?? [];
+  }
+
+  /**
+   * Retiro SPEI a una CLABE bancaria (método "praxis").
+   * Bitso puede exigir confirmación por PIN/OTP según el monto.
+   */
+  async createSpeiWithdrawal(params: {
+    amountMxn: number;
+    clabe: string;
+    beneficiary: string;
+    notes?: string;
+    numericRef?: string;
+    originId?: string;
+  }) {
+    const body: Record<string, any> = {
+      currency: 'mxn',
+      method: 'praxis',
+      amount: params.amountMxn.toFixed(2),
+      clabe: params.clabe,
+      beneficiary: params.beneficiary,
+    };
+    if (params.notes) body.notes_ref = params.notes;
+    if (params.numericRef) body.numeric_ref = params.numericRef;
+    if (params.originId) body.origin_id = params.originId;
+    const data = await this.request<{ payload: any }>('POST', '/api/v3/withdrawals/', body);
+    return data.payload;
+  }
 }

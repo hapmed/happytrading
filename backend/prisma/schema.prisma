@@ -49,6 +49,11 @@ model User {
   // Bóveda de ganancias: separa el excedente del capital inicial y no lo reinvierte
   vaultEnabled   Boolean    @default(false)
   vaultAsset     String?    @default("usdc")
+  // Retiro de ganancias por SPEI a una CLABE bancaria
+  payoutEnabled  Boolean    @default(false)
+  payoutClabe    String?
+  payoutBeneficiary String?
+  workingCapitalMxn Decimal? @db.Decimal(18, 2)
   symbols        String?
   dcaLevels      Int?
   dcaStepPct     Decimal?   @db.Decimal(6, 3)

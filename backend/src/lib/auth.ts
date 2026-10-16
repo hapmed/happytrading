@@ -28,6 +28,11 @@ export function serializeUser(user: any) {
     symbols: user.symbols ?? null,
     dcaLevels: user.dcaLevels ?? null,
     dcaStepPct: user.dcaStepPct?.toString() ?? null,
+    // Retiro de ganancias por SPEI
+    payoutEnabled: user.payoutEnabled ?? false,
+    payoutClabe: user.payoutClabe ?? null,
+    payoutBeneficiary: user.payoutBeneficiary ?? null,
+    workingCapitalMxn: user.workingCapitalMxn?.toString() ?? null,
     createdAt: user.createdAt,
   };
 }
