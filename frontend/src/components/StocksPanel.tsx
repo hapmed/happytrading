@@ -45,8 +45,17 @@ export default function StocksPanel() {
 
       {bp <= 0 && (
         <div className="bitso-warn">
-          ⚠ Tu cuenta Alpaca está en <b>{d.live ? 'LIVE (dinero real)' : 'Paper'}</b> pero con <b>$0</b>. Fóndela en USD
-          para que el bot de acciones pueda operar.
+          ⚠ Tu cuenta Alpaca está en <b>{d.live ? 'LIVE (dinero real)' : 'Paper'}</b> pero con <b>$0</b>.{' '}
+          {d.depositAddress ? (
+            <>
+              Fóndela enviando <b>{d.depositAsset}</b> a esta dirección (red <b>Ethereum / ERC-20</b>):
+              <div className="payout-clabe" style={{ fontSize: 15, wordBreak: 'break-all' }}>
+                {d.depositAddress}
+              </div>
+            </>
+          ) : (
+            'Fóndela en USD para operar.'
+          )}
         </div>
       )}
 
