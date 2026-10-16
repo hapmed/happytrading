@@ -286,6 +286,31 @@ export default function Settings() {
           </Field>
         </div>
       </Panel>
+
+      <Panel title="◈ EXCHANGE PARA OPERAR">
+        <p className="muted" style={{ fontSize: 16 }}>
+          Dónde opera el bot. <b>Binance</b>: comisiones <b>5× menores</b> (0.1% vs 0.5%), más pares y{' '}
+          <b>retiros automáticos por API</b>. Bitso: cripto MX con retiros manuales.
+        </p>
+        <div className="row" style={{ gap: 10 }}>
+          <PixelButton
+            className={user?.exchange !== 'binance' ? '' : 'danger'}
+            onClick={() => updatePref({ exchange: 'bitso' })}
+          >
+            {user?.exchange !== 'binance' ? '✔ BITSO (activo)' : 'USAR BITSO'}
+          </PixelButton>
+          <PixelButton
+            className={user?.exchange === 'binance' ? '' : 'danger'}
+            onClick={() => updatePref({ exchange: 'binance' })}
+          >
+            {user?.exchange === 'binance' ? '✔ BINANCE (activo)' : 'USAR BINANCE'}
+          </PixelButton>
+        </div>
+        <small className="muted" style={{ display: 'block', marginTop: 8 }}>
+          Al cambiar a Binance, el bot usa las llaves de Binance (Config Global → admin) y opera los pares MXN de Binance
+          (BTC, ETH, SOL, USDT, USDC).
+        </small>
+      </Panel>
     </div>
   );
 }
