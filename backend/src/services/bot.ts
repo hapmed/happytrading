@@ -363,7 +363,7 @@ async function planForUser(userId: string): Promise<void> {
     (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
     0,
   );
-  const workingCapital = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
+  const investedMxn = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
 
   // Precio de la cotización en MXN (USDT→MXN) para convertir.
   let quoteToMxn = 1;
@@ -375,20 +375,25 @@ async function planForUser(userId: string): Promise<void> {
     } catch {}
   }
   const equityQuote = equityMxn / quoteToMxn;
-  const cryptoValue = Math.max(0, equityQuote - cashAvailable);
-  let profitReserve = Math.max(0, equityQuote - workingCapital);
-  if (movements.withdrawn > 0) {
-    profitReserve = 0;
-    await logEvent(userId, `💰 Retiro detectado ($${movements.withdrawn.toFixed(2)} MXN)`, 'ok');
-  }
+  const investedQuote = investedMxn / quoteToMxn;
 
-  const cashReserveAmount = equityMxn * (cashReservePct / 100);
+  // ── Bóveda: ganancia acumulada desde el último retiro (hacia los $50) ──
+  const pnlMxn = equityMxn - investedMxn;
+  if (movements.withdrawn > 0) {
+    await prisma.user.update({ where: { id: userId }, data: { vaultBasePnl: String(pnlMxn) } }).catch(() => {});
+    await logEvent(userId, `💰 Retiro detectado ($${movements.withdrawn.toFixed(2)}) → bóveda reiniciada`, 'ok');
+  }
+  const vaultBasePnl = user.vaultBasePnl ? Number(user.vaultBasePnl) : 0;
+  const vaultMxn = Math.max(0, pnlMxn - vaultBasePnl);
+  const profitReserve = vaultMxn / quoteToMxn; // ganancia (en cotización) que NO se reinvierte
+  const cryptoValue = Math.max(0, equityQuote - cashAvailable);
+
+  const cashReserveAmount = equityQuote * (cashReservePct / 100);
 
   // ── Retiro automático de ganancias a la CLABE (Binance → SPEI) ─────
   const PAYOUT_MIN_MXN = 50; // mínimo de retiro SPEI en Binance (verificado en su API)
-  if (user.payoutEnabled && user.payoutClabe && user.payoutBeneficiary && profitReserve > 0) {
-    const profitMxn = profitReserve * quoteToMxn;
-    if (profitMxn >= PAYOUT_MIN_MXN) {
+  if (user.payoutEnabled && user.payoutClabe && user.payoutBeneficiary && vaultMxn > 0) {
+    if (vaultMxn >= PAYOUT_MIN_MXN) {
       try {
         const payoutKey = `payout:${userId}:${new Date().toISOString().slice(0, 13)}`; // máx 1/hora
         if (!(await kv.get(payoutKey))) {
@@ -417,7 +422,7 @@ async function planForUser(userId: string): Promise<void> {
           }
           const bals2 = await client.balance();
           const mxnAvail = Number(bals2.find((b: any) => String(b.currency).toLowerCase() === 'mxn')?.available ?? 0);
-          const amount = Math.min(mxnAvail, profitMxn);
+          const amount = Math.min(mxnAvail, vaultMxn);
           if (amount >= 50) {
             const w = await (client as any).fiatWithdrawMxn({
               amountMxn: Math.round(amount * 100) / 100,
@@ -442,15 +447,13 @@ async function planForUser(userId: string): Promise<void> {
   }
 
   const reservePct = cashReserveAmount;
-  // Efectivo disponible para operar (sin tocar la ganancia reservada).
-  let cashRemaining = Math.max(0, Math.min(cashAvailable - profitReserve - reservePct, workingCapital - cryptoValue));
-  if (profitReserve > 0.5) {
-    await logEvent(
-      userId,
-      `💰 Ganancia acumulada: $${(profitReserve * quoteToMxn).toFixed(2)} MXN (se retira al llegar a $${PAYOUT_MIN_MXN})`,
-      'info',
-    );
-  }
+  // Efectivo disponible para operar (sin tocar la bóveda).
+  let cashRemaining = Math.max(0, Math.min(cashAvailable - profitReserve - reservePct, investedQuote - cryptoValue));
+  await logEvent(
+    userId,
+    `💰 Bóveda: $${vaultMxn.toFixed(2)} / $${PAYOUT_MIN_MXN} (se transfiere a tu CLABE al llegar)`,
+    'info',
+  );
 
   // ⚡ Selección VOLÁTIL: mide el movimiento (ticker) y se queda con las N más volátiles.
   const tickerCache = new Map<string, any>();

@@ -1727,3 +1727,29 @@ a:hover {
   0% { transform: translateY(-60px) rotate(0deg); opacity: 1; }
   100% { transform: translateY(110vh) rotate(540deg); opacity: 0.9; }
 }
+
+/* ── Barra de progreso de la bóveda ───────────────────────────────── */
+.vault-bar {
+  position: relative;
+  height: 26px;
+  border: 3px solid var(--panel-border);
+  background: rgba(0, 0, 0, 0.35);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.vault-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  box-shadow: 0 0 14px rgba(0, 255, 157, 0.6);
+  transition: width 0.6s ease;
+}
+.vault-bar-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}

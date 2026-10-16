@@ -535,6 +535,38 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // Bóveda: acumulado hacia los $50 + histórico total ganado/retirado.
+  app.get('/vault', { preHandler: [authenticate] }, async (req) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const deps = await prisma.deposit.findMany({ where: { userId: req.user.sub } });
+    const netDeposits = deps.reduce(
+      (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
+      0,
+    );
+    const invested = (user?.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
+    let currentValue = 0;
+    try {
+      currentValue = (await getLiveValuation(req.user.sub))?.currentValue ?? 0;
+    } catch {}
+    const pnl = currentValue - invested;
+    const basePnl = user?.vaultBasePnl ? Number(user.vaultBasePnl) : 0;
+    const vault = Math.max(0, pnl - basePnl);
+    const totalWithdrawn = deps
+      .filter((d) => d.kind === 'WITHDRAWAL')
+      .reduce((s, d) => s + Number(d.amount), 0);
+    const goal = 50;
+    return {
+      vault,
+      goal,
+      progress: goal > 0 ? Math.min(1, vault / goal) : 0,
+      totalWithdrawn,
+      totalEarned: totalWithdrawn + vault,
+      pnl,
+      invested,
+      currentValue,
+    };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
