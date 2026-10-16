@@ -202,8 +202,12 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
 
   const regimeLine = ctx.regime ? `régimen_mercado=${ctx.regime.zone} (${ctx.regime.score}/100)` : '';
 
+  const criteria = ctx.aggressive
+    ? `CRITERIOS (SCALPING AGRESIVO): busca ENTRAR siempre que haya una mínima ventaja a favor. Compra si CUALQUIERA de estos se cumple: momentum1h > +0.2%, o tendencia ALCISTA, o RSI < 45 (dip/rebote), o rebote tras una caída. Tolera RSI hasta 75. PREFIERE ACTUAR antes que esperar. Responde HOLD SOLO si es claramente adverso (momentum negativo Y tendencia BAJISTA con RSI>70) o si el spread > 1%. Vende (SELL) para tomar ganancia en cuanto haya beneficio (aunque sea pequeño) o para cortar pérdida.`
+    : `CRITERIOS: compra solo con señales claras a favor (momentum y tendencia alcistas, RSI<70). Vende (SELL) para tomar ganancia o cortar pérdida. Si no hay ventaja clara, responde HOLD.`;
+
   return [
-    `Eres un trader profesional de cripto especializado en SCALPING agresivo: operaciones pequeñas, rápidas y frecuentes. Objetivo: ganar dinero aprovechando momentum y volatilidad, aunque la ganancia por operación sea pequeña. Nunca dejar correr una pérdida.`,
+    `Eres un trader profesional de cripto especializado en SCALPING ${ctx.aggressive ? 'AGRESIVO' : ''}: operaciones pequeñas, rápidas y frecuentes. Objetivo: ganar dinero aprovechando momentum y volatilidad, aunque la ganancia por operación sea pequeña. Nunca dejar correr una pérdida.`,
     `PAR: ${symbol}`,
     `PRECIO: last=${t?.last ?? '-'} bid=${t?.bid ?? '-'} ask=${t?.ask ?? '-'} spread=${spreadPct.toFixed(2)}% vol24h=${t?.volume ?? '-'} (24h high=${t?.high ?? '-'} low=${t?.low ?? '-'})`,
     `INDICADORES: ${indLine}`,
@@ -211,7 +215,7 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
     `POSICIÓN: ${posLine}`,
     regimeLine,
     `SEÑALES_PREVIAS=${recent}`,
-    `CRITERIOS: compra si el momentum y/o la tendencia favorecen subida (RSI<70; mejor si rebota desde RSI<40 con tendencia alcista). Vende (SELL) para tomar ganancia rápido o para cortar pérdida. Si no ves ventaja clara, responde HOLD.`,
+    criteria,
     `REGLAS: entry dentro de ±1% del mercado actual; takeProfit por ENCIMA de entry y stopLoss por DEBAJO (para BUY); relación ganancia/riesgo >= 1.2; no inventes precios ni datos.`,
     `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=60 chars","entry":0,"takeProfit":0,"stopLoss":0}`,
   ]

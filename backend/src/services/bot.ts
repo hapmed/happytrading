@@ -16,7 +16,7 @@ const SYMBOLS: Record<string, string[]> = {
   balanced: ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn'],
   aggressive: ['btc_mxn', 'eth_mxn', 'xrp_mxn', 'sol_mxn', 'usdt_mxn', 'ltc_mxn', 'trx_mxn', 'mana_mxn'],
 };
-const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.6, aggressive: 0.5 };
+const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.6, aggressive: 0.45 };
 const DEFAULT_ORDER_MXN = 200;
 const PLAN_TTL_H = 8; // validez de cada instrucción
 
