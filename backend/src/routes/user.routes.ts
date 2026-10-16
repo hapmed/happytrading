@@ -10,6 +10,12 @@ import { kv } from '../lib/kv.js';
 import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
 import { getUsage, getLimits, getOpenRouterQuota } from '../lib/usage.js';
+import { getIndicators } from '../lib/indicators.js';
+
+// Monedas del termómetro de mercado (pares contra MXN).
+const THERMO_COINS = [
+  'btc', 'eth', 'xrp', 'sol', 'ltc', 'trx', 'mana', 'ada', 'doge', 'avax', 'link', 'dot', 'atom', 'uni', 'aave',
+];
 
 const bitsoSchema = z.object({
   apiKey: z.string().min(1),
@@ -117,6 +123,18 @@ export async function userRoutes(app: FastifyInstance) {
     } catch (err: any) {
       return reply.code(400).send({ error: err.message });
     }
+  });
+
+  // Termómetro de mercado: qué tan barato/caro está cada moneda (estadística).
+  app.get('/market', { preHandler: [authenticate] }, async () => {
+    const rows = await Promise.all(
+      THERMO_COINS.map(async (c) => {
+        const ind = await getIndicators(c).catch(() => null);
+        return ind ? { currency: c, ...ind } : null;
+      }),
+    );
+    const coins = rows.filter(Boolean).sort((a: any, b: any) => a.zScore - b.zScore);
+    return { coins, updatedAt: new Date().toISOString() };
   });
 
   // Límites/estado de la cuenta de Bitso (para saber si Bitso bloquea operaciones).

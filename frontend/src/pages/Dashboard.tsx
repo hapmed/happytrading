@@ -12,6 +12,7 @@ import Instructions from '../components/Instructions';
 import Usage from '../components/Usage';
 import RecentTrades from '../components/RecentTrades';
 import Signals from '../components/Signals';
+import MarketThermometer from '../components/MarketThermometer';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -100,6 +101,7 @@ export default function Dashboard() {
         )}
 
         <Positions />
+        <MarketThermometer />
         <Instructions />
         <Usage />
         <RecentTrades trades={trades} />
