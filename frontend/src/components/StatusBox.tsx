@@ -49,6 +49,8 @@ export default function StatusBox() {
   const ss = Math.floor((remaining % 60000) / 1000);
 
   const uptime = user?.autoSince ? fmtDuration(now - new Date(user.autoSince).getTime()) : '—';
+  const liveSec = user?.autoSince ? Math.max(0, Math.floor((now - new Date(user.autoSince).getTime()) / 1000)) : 0;
+  const totalUptime = fmtDuration((Number(user?.autoTotalSec ?? 0) + liveSec) * 1000);
 
   const toggle = async () => {
     if (busy) return;
@@ -75,7 +77,7 @@ export default function StatusBox() {
       </div>
 
       <div className="uptime">
-        ⏱ TIEMPO EN AUTOMÁTICO: <b>{uptime}</b>
+        ⏱ ACTIVO AHORA: <b>{uptime}</b> · TOTAL HISTÓRICO: <b>{totalUptime}</b>
       </div>
 
       <button type="button" className={`auto-banner ${on ? 'on' : 'off'}`} onClick={toggle} disabled={busy} style={{ marginBottom: 0 }}>

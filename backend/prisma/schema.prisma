@@ -37,6 +37,7 @@ model User {
   autoTrade      Boolean    @default(true)
   rotate         Boolean    @default(true)
   autoSince      DateTime?
+  autoTotalSec   Int        @default(0)
   volatileTop    Int?
   widgetToken    String?
   maxOrderAmount Decimal?   @db.Decimal(18, 8)

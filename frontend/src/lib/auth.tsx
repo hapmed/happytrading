@@ -13,6 +13,7 @@ export interface User {
   autoTrade: boolean;
   rotate: boolean;
   autoSince: string | null;
+  autoTotalSec: number;
   volatileTop: number | null;
   maxOrderAmount: string | null;
   stopLossPct: string | null;

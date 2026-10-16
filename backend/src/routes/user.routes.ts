@@ -71,8 +71,15 @@ export async function userRoutes(app: FastifyInstance) {
     const body = tradingSchema.parse(req.body);
     const current = await prisma.user.findUnique({ where: { id: req.user.sub } });
     const data: any = { ...body };
-    if (body.autoTrade === true && !current?.autoSince) data.autoSince = new Date();
-    if (body.autoTrade === false) data.autoSince = null;
+    if (body.autoTrade === true) {
+      if (!current?.autoSince) data.autoSince = new Date();
+    } else if (body.autoTrade === false) {
+      if (current?.autoSince) {
+        const secs = Math.max(0, Math.floor((Date.now() - new Date(current.autoSince).getTime()) / 1000));
+        data.autoTotalSec = (current.autoTotalSec || 0) + secs;
+      }
+      data.autoSince = null;
+    }
     await prisma.user.update({ where: { id: req.user.sub }, data });
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
     return serializeUser(user);
