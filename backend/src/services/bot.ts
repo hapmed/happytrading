@@ -220,6 +220,9 @@ export async function runBotForUser(userId: string): Promise<void> {
     await logEvent(userId, `Régimen: ${regime.zone} (${regime.score}/100)`, regime.zone === 'RISK_OFF' ? 'warn' : 'info');
   }
 
+  // Efectivo disponible que se irá repartiendo entre los pares (no sobre-comprometer)
+  let cashRemaining = Math.max(0, mxnAvailable - equityMxn * (cashReservePct / 100));
+
   // ⚡ Selección VOLÁTIL: mide el movimiento (ticker) y se queda con las N más volátiles.
   const tickerCache = new Map<string, any>();
   const ranked: Array<{ symbol: string; vol: number }> = [];
@@ -329,11 +332,9 @@ export async function runBotForUser(userId: string): Promise<void> {
           await logEvent(userId, `Compra bloqueada por régimen RISK_OFF · ${symbol}`, 'warn');
           continue;
         }
-        const reserveMxn = equityMxn * (cashReservePct / 100);
-        const spendable = Math.max(0, mxnAvailable - reserveMxn);
         let size = stopLossPct > 0 ? fixedFractionalSize(equityMxn, riskPct, stopLossPct) : maxOrder;
         if (!isFinite(size) || size <= 0) size = maxOrder;
-        let spend = Math.min(maxOrder, size, spendable);
+        let spend = Math.min(maxOrder, size, cashRemaining);
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
 
         // Respetar mínimos de Bitso (monto y valor por orden) antes de crear el plan
@@ -353,6 +354,7 @@ export async function runBotForUser(userId: string): Promise<void> {
         }
         let levels = dcaLevels;
         if (minPerTranche > 0) levels = Math.max(1, Math.min(dcaLevels, Math.floor(spend / minPerTranche)));
+        cashRemaining = Math.max(0, cashRemaining - spend);
         const per = spend / levels;
         const expires = new Date(Date.now() + PLAN_TTL_H * 3600 * 1000);
         for (let i = 0; i < levels; i++) {

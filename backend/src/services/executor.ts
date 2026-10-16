@@ -30,6 +30,60 @@ async function applyPosition(userId: string, symbol: string, side: 'BUY' | 'SELL
   }
 }
 
+// Evita rotar demasiado seguido (máx. 1 vez por minuto por usuario)
+const rotateCooldown = new Map<string, number>();
+
+/**
+ * Sin MXN suficiente: VENDE la posición más rentable (o la que alcance) para fondear la compra.
+ * Sacrifica la posición actual para no perder una mejor oportunidad (la estrategia siempre busca ganar).
+ */
+async function rotateToFund(
+  userId: string,
+  excludeSymbol: string,
+  needMxn: number,
+  client: BitsoClient,
+  limits: Map<string, any>,
+): Promise<string | null> {
+  const lastT = rotateCooldown.get(userId) ?? 0;
+  if (Date.now() - lastT < 60_000) return null;
+
+  const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 } } });
+  const others = positions.filter((p) => p.symbol !== excludeSymbol);
+  let best: { symbol: string; qty: number; price: number; value: number; score: number } | null = null;
+
+  for (const p of others) {
+    try {
+      const t = await client.ticker(p.symbol);
+      const price = Number(t.last ?? 0);
+      const qty = Number(p.baseAmount);
+      const value = qty * price;
+      if (value <= 0) continue;
+      const lim = limits.get(p.symbol);
+      if (lim && (qty < lim.minimumAmount || value < lim.minimumValue)) continue; // no se puede vender (bajo el mínimo)
+      const avg = Number(p.avgCostMxn);
+      const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
+      const score = pnlPct + (value >= needMxn ? 20 : 0); // preferir las que ya ganan y cubren lo necesario
+      if (!best || score > best.score) best = { symbol: p.symbol, qty, price, value, score };
+    } catch {}
+  }
+  if (!best) return null;
+
+  try {
+    rotateCooldown.set(userId, Date.now());
+    const placed = await client.placeOrder({ book: best.symbol, side: 'sell', type: 'market', major: roundStr(best.qty, 8) });
+    await prisma.trade.create({
+      data: {
+        userId, symbol: best.symbol, side: 'SELL', amount: roundStr(best.qty, 8), price: String(best.price),
+        status: 'PENDING', source: 'AI', reason: 'Rotar para fondear compra', externalId: placed?.oid ? String(placed.oid) : null,
+      },
+    });
+    await applyPosition(userId, best.symbol, 'SELL', best.qty, best.price);
+    return best.symbol;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * EJECUTOR (worker "tonto", SIN IA):
  * - cumple las instrucciones de la IA comprobando precio/tiempo
@@ -73,6 +127,16 @@ export async function runExecutorAll(): Promise<void> {
     } catch {}
   }
 
+  // Saldos MXN por usuario (para no comprar sin fondos)
+  const mxnMap = new Map<string, number>();
+  for (const u of users) {
+    try {
+      const bals = await clients.get(u.id)!.balance();
+      const mxn = bals.find((b: any) => String(b.currency).toLowerCase() === 'mxn');
+      mxnMap.set(u.id, Number(mxn?.available ?? 0));
+    } catch {}
+  }
+
   // 1) Cumplir instrucciones
   for (const ins of instructions) {
     const user = users.find((u) => u.id === ins.userId);
@@ -94,6 +158,18 @@ export async function runExecutorAll(): Promise<void> {
         if (minor <= 1 || (lim && lim.minimumValue > 0 && minor < lim.minimumValue)) {
           await logEvent(user.id, `Plan cancelado ${ins.symbol}: monto bajo el mínimo`, 'warn');
           await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'CANCELLED' } });
+          continue;
+        }
+
+        // ¿Alcanza el MXN? Si no, vende una posición para fondear (rota) y reintenta el próximo ciclo.
+        const mxn = mxnMap.get(ins.userId) ?? 0;
+        if (minor > mxn) {
+          const sold = await rotateToFund(ins.userId, ins.symbol, minor, client, limits);
+          if (sold) {
+            await logEvent(user.id, `🔄 Sin MXN ($${mxn.toFixed(2)}) → vendo ${sold} para fondear ${ins.symbol}`, 'warn');
+          } else {
+            await logEvent(user.id, `Sin MXN ($${mxn.toFixed(2)}) ni posiciones para fondear ${ins.symbol}`, 'info');
+          }
           continue;
         }
         await logEvent(user.id, `⚙ Worker: BUY ${ins.symbol} @ ${price}`, 'ok');
