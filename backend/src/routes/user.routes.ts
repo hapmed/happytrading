@@ -148,8 +148,6 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: err.message });
     }
   });
-    }
-  });
 
   // Histórico de saldos (snapshots capturados por el bot)
   app.get('/snapshots', { preHandler: [authenticate] }, async (req) => {
