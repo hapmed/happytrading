@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Panel, Stat } from './Retro';
 import { pickLine } from '../lib/wolfLines';
+import Donut from './Donut';
 
 function fmt(n: number) {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -185,23 +186,7 @@ export default function Portfolio() {
         {holdings.length === 0 ? (
           <div className="muted center">Aún sin datos de portafolio.</div>
         ) : (
-          holdings.map((h, i) => (
-            <div className="holding" key={h.currency}>
-              <div className="holding-top">
-                <b>{String(h.currency).toUpperCase()}</b>
-                <span>${fmt(Number(h.valueMxn))}</span>
-              </div>
-              <div className="bar">
-                <div
-                  className="bar-fill"
-                  style={{ width: `${(Number(h.valueMxn) / maxHolding) * 100}%`, animationDelay: `${i * 0.07}s` }}
-                />
-              </div>
-              <small className="muted">
-                {Number(h.amount).toLocaleString('es-MX')} × ${fmt(Number(h.priceMxn))}
-              </small>
-            </div>
-          ))
+          <Donut holdings={holdings} total={current} />
         )}
       </Panel>
     </>

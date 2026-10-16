@@ -8,6 +8,7 @@ import Portfolio from '../components/Portfolio';
 import AutoStatus from '../components/AutoStatus';
 import RegimeGauge from '../components/RegimeGauge';
 import Positions from '../components/Positions';
+import RecentTrades from '../components/RecentTrades';
 import Instructions from '../components/Instructions';
 import Usage from '../components/Usage';
 
@@ -116,38 +117,7 @@ export default function Dashboard() {
         )}
       </Panel>
 
-      <Panel title="◈ HISTORIAL DE OPERACIONES">
-        {trades.length === 0 ? (
-          <div className="muted center">SIN OPERACIONES TODAVÍA.</div>
-        ) : (
-          <table className="retro-table">
-            <thead>
-              <tr>
-                <th>PAR</th>
-                <th>LADO</th>
-                <th>MONTO</th>
-                <th>PRECIO</th>
-                <th>ESTADO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trades.slice(0, 12).map((t) => (
-                <tr key={t.id}>
-                  <td>{t.symbol}</td>
-                  <td>
-                    <span className={`badge ${t.side.toLowerCase()}`}>{t.side}</span>
-                  </td>
-                  <td>{t.amount}</td>
-                  <td>{t.price}</td>
-                  <td>
-                    <span className={`badge ${t.status.toLowerCase()}`}>{t.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Panel>
+      <RecentTrades trades={trades} />
     </div>
   );
 }
