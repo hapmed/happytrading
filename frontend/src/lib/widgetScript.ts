@@ -28,9 +28,9 @@ async function getData() {
     return await r.loadJSON();
   } catch (e) { return null; }
 }
-async function getWolf() {
+async function getWolf(gain) {
   try {
-    const r = new Request(BASE + "/wolf.png");
+    const r = new Request(BASE + (gain ? "/wolf.png" : "/wolf-loss.png"));
     return await r.loadImage();
   } catch (e) { return null; }
 }
@@ -103,7 +103,7 @@ async function make(family) {
   const d = (await getData()) || {};
   const mood = d.mood || "idle";
   const gain = Number(d.pnl) >= 0;
-  const wolf = await getWolf();
+  const wolf = await getWolf(gain);
   if (family === "small") return await makeSmall(d, gain, wolf);
   if (family === "large") return await makeLarge(d, gain, wolf, mood);
   return await makeMedium(d, gain, wolf, mood);
