@@ -5,13 +5,13 @@ import { authenticate, serializeUser } from '../lib/auth.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
 import { randomToken } from '../lib/crypto.js';
 import { BitsoClient } from '../services/bitso.js';
-import { getActivity } from '../lib/activity.js';
+import { getActivity, logEvent } from '../lib/activity.js';
+import { getBookLimits } from '../lib/bookLimits.js';
 import { kv } from '../lib/kv.js';
 import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
 import { getUsage, getLimits, getOpenRouterQuota } from '../lib/usage.js';
 import { getIndicators } from '../lib/indicators.js';
-import { alpaca } from '../lib/alpaca.js';
 
 // Monedas del termómetro de mercado (pares contra MXN).
 const THERMO_COINS = [
@@ -341,47 +341,96 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
-  // Estado de la cuenta de ACCIONES (Alpaca) — solo lectura.
-  app.get('/alpaca', { preHandler: [authenticate] }, async (_req, reply) => {
-    const s = await prisma.setting.findUnique({ where: { key: 'alpaca' } });
-    const v = (s?.value ?? {}) as any;
-    if (!v.keyId || !v.secret) return reply.code(400).send({ error: 'Alpaca no configurado' });
-    const creds = {
-      keyId: String(v.keyId),
-      secret: decrypt(String(v.secret)),
-      baseUrl: String(v.baseUrl || 'https://api.alpaca.markets'),
-    };
-    try {
-      const [account, positions, clock, wSol, wEth] = await Promise.all([
-        alpaca.account(creds),
-        alpaca.positions(creds).catch(() => []),
-        alpaca.clock(creds).catch(() => null),
-        alpaca.wallets(creds, 'USDC', 'SOL').catch(() => null),
-        alpaca.wallets(creds, 'USDC').catch(() => null),
-      ]);
-      return {
-        live: creds.baseUrl.includes('api.alpaca.markets'),
-        deposit: {
-          solana: wSol?.address ?? null,
-          ethereum: wEth?.address ?? null,
-          asset: 'USDC / USDT',
-        },
-        account: {
-          status: account?.status,
-          currency: account?.currency,
-          cash: account?.cash,
-          equity: account?.equity,
-          buying_power: account?.buying_power,
-          portfolio_value: account?.portfolio_value,
-          trading_blocked: account?.trading_blocked,
-          crypto_status: account?.crypto_status,
-        },
-        positions,
-        clock,
-      };
-    } catch (err: any) {
-      return reply.code(400).send({ error: err.message });
+  // "Vaciar a la bóveda": vende TODAS las posiciones y compra USDT con todo el MXN.
+  // (Deja el capital líquido en la moneda estable, listo para retirar o mover.)
+  app.post('/vault/empty', { preHandler: [authenticate] }, async (req, reply) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (!user?.bitsoApiKey || !user.bitsoApiSecret) return reply.code(400).send({ error: 'Bitso no conectado' });
+    const client = new BitsoClient({
+      apiKey: decrypt(user.bitsoApiKey),
+      apiSecret: decrypt(user.bitsoApiSecret),
+    });
+    const limits = await getBookLimits(client).catch(() => new Map<string, any>());
+    const vaultAsset = (user.vaultAsset || 'usdt').toLowerCase();
+    const results: any[] = [];
+
+    // 1) Vender todas las posiciones NO reservadas.
+    const balances = await client.balance();
+    const positions = await prisma.position.findMany({
+      where: { userId: user.id, baseAmount: { gt: 0 }, reserved: false },
+    });
+    for (const p of positions) {
+      try {
+        const base = p.symbol.split('_')[0];
+        const bal = balances.find((b: any) => String(b.currency).toLowerCase() === base);
+        const qty = Math.min(Number(p.baseAmount), Number(bal?.available ?? 0) * 0.999);
+        if (qty <= 0) continue;
+        const t = await client.ticker(p.symbol);
+        const price = Number(t.last ?? 0);
+        const lim = limits.get(p.symbol);
+        if (lim && (qty < lim.minimumAmount || qty * price < lim.minimumValue)) {
+          results.push({ symbol: p.symbol, skipped: 'bajo el mínimo de Bitso' });
+          continue;
+        }
+        const order = await client.placeOrder({ book: p.symbol, side: 'sell', type: 'market', major: String(qty) });
+        await prisma.trade.create({
+          data: {
+            userId: user.id, symbol: p.symbol, side: 'SELL', amount: String(qty), price: String(price),
+            status: 'PENDING', source: 'AI', reason: 'Vaciar a la bóveda',
+            externalId: order?.oid ? String(order.oid) : null,
+          },
+        });
+        await prisma.position.update({ where: { id: p.id }, data: { baseAmount: '0' } });
+        results.push({ symbol: p.symbol, sold: qty });
+      } catch (err: any) {
+        results.push({ symbol: p.symbol, error: String(err.message).slice(0, 90) });
+      }
     }
+
+    // 2) Comprar la moneda de la bóveda con TODO el MXN disponible.
+    await new Promise((r) => setTimeout(r, 3000));
+    const bals2 = await client.balance();
+    const mxn = Number(bals2.find((b: any) => String(b.currency).toLowerCase() === 'mxn')?.available ?? 0);
+    const vsym = `${vaultAsset}_mxn`;
+    const limV = limits.get(vsym);
+    let boughtMxn = 0;
+    if (mxn >= Math.max(1, limV?.minimumValue ?? 1)) {
+      try {
+        const t = await client.ticker(vsym);
+        const price = Number(t.last ?? 0);
+        if (price > 0) {
+          const amt = Math.floor(mxn * 100) / 100;
+          const order = await client.placeOrder({ book: vsym, side: 'buy', type: 'market', minor: String(amt) });
+          const qty = amt / price;
+          await prisma.trade.create({
+            data: {
+              userId: user.id, symbol: vsym, side: 'BUY', amount: String(amt), price: String(price),
+              status: 'PENDING', source: 'AI', reason: 'Vaciar a la bóveda',
+              externalId: order?.oid ? String(order.oid) : null,
+            },
+          });
+          const ex = await prisma.position.findUnique({ where: { userId_symbol: { userId: user.id, symbol: vsym } } });
+          const oldQty = ex ? Number(ex.baseAmount) : 0;
+          const oldCost = ex ? Number(ex.avgCostMxn) : 0;
+          const nQ = oldQty + qty;
+          const nA = nQ > 0 ? (oldQty * oldCost + qty * price) / nQ : price;
+          await prisma.position.upsert({
+            where: { userId_symbol: { userId: user.id, symbol: vsym } },
+            update: { baseAmount: String(nQ), avgCostMxn: String(nA), reserved: true },
+            create: { userId: user.id, symbol: vsym, baseAmount: String(nQ), avgCostMxn: String(nA), reserved: true },
+          });
+          boughtMxn = amt;
+        }
+      } catch (err: any) {
+        results.push({ symbol: vsym, error: String(err.message).slice(0, 90) });
+      }
+    }
+    await logEvent(
+      user.id,
+      `🧺 Vaciar a la bóveda: ${results.length} movimiento(s), ${vaultAsset.toUpperCase()} por ~$${boughtMxn.toFixed(2)} MXN`,
+      'ok',
+    ).catch(() => {});
+    return { results, vaultBoughtMxn: boughtMxn, vaultAsset };
   });
 
   // Bóveda de ganancias: cuánto se ha acumulado desde el último retiro + historial (gráfica).
