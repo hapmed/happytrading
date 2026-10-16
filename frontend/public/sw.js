@@ -1,5 +1,5 @@
 // Service worker de HappyTrading (PWA)
-const CACHE = 'happytrading-v2';
+const CACHE = 'happytrading-v3';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
