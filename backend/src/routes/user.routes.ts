@@ -119,6 +119,23 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // Límites/estado de la cuenta de Bitso (para saber si Bitso bloquea operaciones).
+  app.get('/bitso-status', { preHandler: [authenticate] }, async (req, reply) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) {
+      return reply.code(400).send({ error: 'Bitso no conectado' });
+    }
+    try {
+      const client = new BitsoClient({
+        apiKey: decrypt(user.bitsoApiKey),
+        apiSecret: decrypt(user.bitsoApiSecret),
+      });
+      return await client.accountStatus();
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message });
+    }
+  });
+
   // Histórico de saldos (snapshots capturados por el bot)
   app.get('/snapshots', { preHandler: [authenticate] }, async (req) => {
     return prisma.balanceSnapshot.findMany({
