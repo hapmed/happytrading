@@ -69,7 +69,10 @@ async function rotateToFund(
       if (!best || score > best.score) best = { symbol: p.symbol, qty, price, value, score };
     } catch {}
   }
-  if (!best) return null;
+  if (!best) {
+    console.warn(`[rotateToFund] sin candidato para ${userId} (posiciones=${others.length}, need=${needMxn})`);
+    return null;
+  }
 
   try {
     rotateCooldown.set(userId, Date.now());
@@ -91,7 +94,8 @@ async function rotateToFund(
     });
     await applyPosition(userId, best.symbol, 'SELL', sellQty, best.price);
     return best.symbol;
-  } catch {
+  } catch (err) {
+    console.error(`[rotateToFund] venta ${best.symbol} falló:`, (err as Error).message);
     return null;
   }
 }
