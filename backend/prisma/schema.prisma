@@ -37,7 +37,7 @@ model User {
   autoTrade      Boolean    @default(true)
   rotate         Boolean    @default(true)
   volatileTop    Int?
-  widgetToken    String?    @unique
+  widgetToken    String?
   maxOrderAmount Decimal?   @db.Decimal(18, 8)
   stopLossPct    Decimal?   @db.Decimal(6, 3)
   takeProfitPct  Decimal?   @db.Decimal(6, 3)
@@ -60,6 +60,7 @@ model User {
   instructions  Instruction[]
   deposits      Deposit[]
 
+  @@index([widgetToken])
   @@map("users")
 }
 
