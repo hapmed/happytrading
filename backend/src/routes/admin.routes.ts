@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAdmin, serializeUser } from '../lib/auth.js';
-import { hashPassword } from '../lib/crypto.js';
+import { hashPassword, encrypt, decrypt } from '../lib/crypto.js';
 import { sendMail } from '../lib/email.js';
 
 const MASK = '••••••';
@@ -18,6 +18,10 @@ const smtpSchema = z.object({
 
 const settingsSchema = z.object({
   smtp: smtpSchema.nullable().optional(),
+  alpaca: z
+    .object({ keyId: z.string().optional(), secret: z.string().optional(), baseUrl: z.string().optional() })
+    .nullable()
+    .optional(),
   gemini: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   openrouter: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   bot: z.object({ intervalMs: z.number().int().min(30000).optional(), regimeFilter: z.boolean().optional() }).nullable().optional(),
@@ -103,7 +107,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ----- Configuración global -----
   app.get('/settings', { preHandler: [requireAdmin] }, async () => {
-    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'limits', 'providers'];
+    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'limits', 'providers', 'alpaca'];
     const rows = await prisma.setting.findMany({ where: { key: { in: keys } } });
     const out: Record<string, unknown> = {};
     for (const r of rows) out[r.key] = r.value;
@@ -116,6 +120,7 @@ export async function adminRoutes(app: FastifyInstance) {
       out.providers = (out.providers as any[]).map((p) => ({ ...p, apiKey: p.apiKey ? MASK : '' }));
     }
     if (out.turnstile) out.turnstile = mask(out.turnstile, 'secretKey');
+    if (out.alpaca) out.alpaca = mask(out.alpaca, 'secret');
     return out;
   });
 
@@ -123,7 +128,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const body = settingsSchema.parse(req.body);
 
     const existing = await prisma.setting.findMany({
-      where: { key: { in: ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot'] } },
+      where: { key: { in: ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'alpaca'] } },
     });
     const map = new Map(existing.map((r) => [r.key, r.value]));
 
@@ -149,6 +154,20 @@ export async function adminRoutes(app: FastifyInstance) {
         smtp = preserveMasked(map.get('smtp'), smtp, 'pass');
       }
       await upsert('smtp', smtp);
+    }
+    if (body.alpaca !== undefined) {
+      let al: any = body.alpaca;
+      if (al) {
+        const prev = (map.get('alpaca') as any) ?? {};
+        al = {
+          keyId: al.keyId ?? prev.keyId ?? '',
+          baseUrl: al.baseUrl || prev.baseUrl || 'https://api.alpaca.markets',
+          // El secret se guarda CIFRADO; si llega enmascarado, se conserva el anterior.
+          secret: al.secret && al.secret !== MASK ? encrypt(al.secret) : (prev.secret ?? ''),
+        };
+        if (!al.keyId || !al.secret) al = {};
+      }
+      await upsert('alpaca', al);
     }
     if (body.gemini !== undefined) {
       let gemini: any = body.gemini;

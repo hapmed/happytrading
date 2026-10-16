@@ -11,6 +11,7 @@ import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
 import { getUsage, getLimits, getOpenRouterQuota } from '../lib/usage.js';
 import { getIndicators } from '../lib/indicators.js';
+import { alpaca } from '../lib/alpaca.js';
 
 // Monedas del termómetro de mercado (pares contra MXN).
 const THERMO_COINS = [
@@ -335,6 +336,42 @@ export async function userRoutes(app: FastifyInstance) {
         mxn: (m.currency_configurations ?? []).find((c: any) => c.currency === 'mxn') ?? null,
       }));
       return { methods: summary };
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message });
+    }
+  });
+
+  // Estado de la cuenta de ACCIONES (Alpaca) — solo lectura.
+  app.get('/alpaca', { preHandler: [authenticate] }, async (_req, reply) => {
+    const s = await prisma.setting.findUnique({ where: { key: 'alpaca' } });
+    const v = (s?.value ?? {}) as any;
+    if (!v.keyId || !v.secret) return reply.code(400).send({ error: 'Alpaca no configurado' });
+    const creds = {
+      keyId: String(v.keyId),
+      secret: decrypt(String(v.secret)),
+      baseUrl: String(v.baseUrl || 'https://api.alpaca.markets'),
+    };
+    try {
+      const [account, positions, clock] = await Promise.all([
+        alpaca.account(creds),
+        alpaca.positions(creds).catch(() => []),
+        alpaca.clock(creds).catch(() => null),
+      ]);
+      return {
+        live: creds.baseUrl.includes('api.alpaca.markets'),
+        account: {
+          status: account?.status,
+          currency: account?.currency,
+          cash: account?.cash,
+          equity: account?.equity,
+          buying_power: account?.buying_power,
+          portfolio_value: account?.portfolio_value,
+          trading_blocked: account?.trading_blocked,
+          crypto_status: account?.crypto_status,
+        },
+        positions,
+        clock,
+      };
     } catch (err: any) {
       return reply.code(400).send({ error: err.message });
     }
