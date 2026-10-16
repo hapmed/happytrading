@@ -48,7 +48,7 @@ model User {
   cashReservePct Decimal?   @db.Decimal(6, 3)
   // Bóveda de ganancias: separa el excedente del capital inicial y no lo reinvierte
   vaultEnabled   Boolean    @default(false)
-  vaultAsset     String?    @default("usdc")
+  vaultAsset     String?    @default("usdt")
   // Ganancia acumulada desde el último retiro (bóveda)
   vaultBasePnl   Decimal?   @db.Decimal(18, 2)
   // Retiro de ganancias por SPEI a una CLABE bancaria

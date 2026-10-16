@@ -34,6 +34,8 @@ export function serializeUser(user: any) {
     payoutBeneficiary: user.payoutBeneficiary ?? null,
     payoutBank: user.payoutBank ?? null,
     workingCapitalMxn: user.workingCapitalMxn?.toString() ?? null,
+    vaultEnabled: user.vaultEnabled ?? false,
+    vaultAsset: user.vaultAsset ?? 'usdt',
     createdAt: user.createdAt,
   };
 }

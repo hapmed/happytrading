@@ -43,6 +43,9 @@ const tradingSchema = z.object({
   payoutBeneficiary: z.string().max(120).optional(),
   payoutBank: z.string().max(60).optional(),
   workingCapitalMxn: z.number().min(0).optional(),
+  // Bóveda de ganancias en moneda estable
+  vaultEnabled: z.boolean().optional(),
+  vaultAsset: z.enum(['usdt', 'usdc', 'dai']).optional(),
 });
 
 export async function userRoutes(app: FastifyInstance) {
