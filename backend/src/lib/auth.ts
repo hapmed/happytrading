@@ -32,6 +32,7 @@ export function serializeUser(user: any) {
     payoutEnabled: user.payoutEnabled ?? false,
     payoutClabe: user.payoutClabe ?? null,
     payoutBeneficiary: user.payoutBeneficiary ?? null,
+    payoutBank: user.payoutBank ?? null,
     workingCapitalMxn: user.workingCapitalMxn?.toString() ?? null,
     createdAt: user.createdAt,
   };

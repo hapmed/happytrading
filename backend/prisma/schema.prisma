@@ -53,6 +53,7 @@ model User {
   payoutEnabled  Boolean    @default(false)
   payoutClabe    String?
   payoutBeneficiary String?
+  payoutBank     String?
   workingCapitalMxn Decimal? @db.Decimal(18, 2)
   symbols        String?
   dcaLevels      Int?

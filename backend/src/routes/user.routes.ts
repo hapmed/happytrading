@@ -41,6 +41,7 @@ const tradingSchema = z.object({
   payoutEnabled: z.boolean().optional(),
   payoutClabe: z.string().max(24).optional(),
   payoutBeneficiary: z.string().max(120).optional(),
+  payoutBank: z.string().max(60).optional(),
   workingCapitalMxn: z.number().min(0).optional(),
 });
 
@@ -373,9 +374,9 @@ export async function userRoutes(app: FastifyInstance) {
       // No se puede retirar más de lo disponible ni más que la ganancia calculada.
       const maxByProfit = Math.max(0, available);
       const amount = requested > 0 ? Math.min(requested, maxByProfit) : Math.min(profit, maxByProfit);
-      if (!(amount >= 50)) {
+      if (!(amount >= 1)) {
         return reply.code(400).send({
-          error: `Monto insuficiente para retirar (disponible $${available.toFixed(2)}, ganancia $${profit.toFixed(2)}; mínimo sugerido $50)`,
+          error: `Monto insuficiente para retirar (disponible $${available.toFixed(2)}, ganancia $${profit.toFixed(2)})`,
         });
       }
       const w = await client.createSpeiWithdrawal({
