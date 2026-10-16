@@ -456,17 +456,29 @@ export async function userRoutes(app: FastifyInstance) {
     } catch {}
     const pnl = currentValue - invested;
     const basePnl = user?.vaultBasePnl ? Number(user.vaultBasePnl) : 0;
-    const vault = Math.max(0, pnl - basePnl);
+    const floating = Math.max(0, pnl - basePnl);
+
+    // Bóveda REAL = el MXN guardado en la cartera Funding de Binance (estable, no flota).
+    let vaultStored = 0;
+    try {
+      const client = await makeExchangeClient(user!);
+      const f = await (client as any)?.fundingBalance?.();
+      vaultStored = Number(f?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+    } catch {}
+    const vault = vaultStored; // la olla muestra lo GUARDADO (no la flotante)
+
     const totalWithdrawn = deps
       .filter((d) => d.kind === 'WITHDRAWAL')
       .reduce((s, d) => s + Number(d.amount), 0);
     const goal = 50;
     return {
       vault,
+      vaultStored,
+      floating,
       goal,
       progress: goal > 0 ? Math.min(1, vault / goal) : 0,
       totalWithdrawn,
-      totalEarned: totalWithdrawn + vault,
+      totalEarned: totalWithdrawn + vaultStored + floating,
       pnl,
       invested,
       currentValue,

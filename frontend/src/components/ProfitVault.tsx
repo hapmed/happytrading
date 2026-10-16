@@ -49,9 +49,15 @@ export default function ProfitVault() {
         {/* Datos */}
         <div className="pot-info">
           <div>
-            <span className="muted">EN LA BÓVEDA (MXN)</span>
+            <span className="muted">EN LA BÓVEDA (guardado, MXN)</span>
             <b className={vault > 0 ? 'vault-pos' : ''}>${vault.toFixed(2)}</b>
             <span className="muted">de ${goal}</span>
+          </div>
+          <div>
+            <span className="muted">FLOTANTE (no realizado)</span>
+            <b className={Number(d.floating ?? 0) > 0 ? 'vault-pos' : 'muted'}>
+              ${Number(d.floating ?? 0).toFixed(2)}
+            </b>
           </div>
           <div>
             <span className="muted">TOTAL GANADO</span>
