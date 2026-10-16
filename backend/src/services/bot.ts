@@ -188,10 +188,11 @@ async function planForUser(userId: string): Promise<void> {
     return;
   }
   const exch = 'binance';
+  const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
 
   const limits = await getBookLimits(client, exch).catch(() => new Map<string, BookLimits>());
 
-  await setState(userId, 'reading_balance', 'Leyendo saldo de Bitso');
+  await setState(userId, 'reading_balance', 'Leyendo saldo');
   await logEvent(userId, 'IA planificando · leyendo saldo', 'info');
 
   let balances: any[];
@@ -247,7 +248,6 @@ async function planForUser(userId: string): Promise<void> {
   const dcaLevels = user.dcaLevels ? Math.max(1, Math.min(10, user.dcaLevels)) : 3;
   const dcaStepPct = user.dcaStepPct ? Number(user.dcaStepPct) : 2;
   const vaultAsset = (user.vaultAsset || 'usdt').toLowerCase();
-  const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
   const heldCurrencies = balances
     .filter(
       (b: any) =>
