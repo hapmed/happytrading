@@ -191,23 +191,28 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   // Mis posiciones con PnL no realizado (memoria de operaciones)
-  app.get('/positions', { preHandler: [authenticate] }, async (req) => {    const positions = await prisma.position.findMany({
+  app.get('/positions', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const quoteCur = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    const positions = await prisma.position.findMany({
       where: { userId: req.user.sub },
       orderBy: { updatedAt: 'desc' },
     });
     const live = await getLiveValuation(req.user.sub).catch(() => null);
     const priceMap = new Map<string, number>((live?.holdings ?? []).map((h: any) => [h.currency, h.priceMxn]));
+    // El costo está guardado en la moneda de cotización (USDT o MXN) → convertir a MXN.
+    const quoteToMxn = quoteCur === 'mxn' ? 1 : Number(priceMap.get(quoteCur) ?? 0) || 1;
     return positions
       .filter((p) => Number(p.baseAmount) > 0)
       .map((p) => {
         const base = p.symbol.split('_')[0];
         const price = priceMap.get(base) ?? 0;
         const qty = Number(p.baseAmount);
-        const avg = Number(p.avgCostMxn);
+        const avgMxn = Number(p.avgCostMxn) * quoteToMxn; // costo en MXN
         const valueMxn = qty * price;
-        const pnl = avg > 0 ? (price - avg) * qty : 0;
-        const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
-        return { symbol: p.symbol, baseAmount: qty, avgCostMxn: avg, priceMxn: price, valueMxn, pnl, pnlPct };
+        const pnl = avgMxn > 0 ? (price - avgMxn) * qty : 0;
+        const pnlPct = avgMxn > 0 ? ((price - avgMxn) / avgMxn) * 100 : 0;
+        return { symbol: p.symbol, baseAmount: qty, avgCostMxn: avgMxn, priceMxn: price, valueMxn, pnl, pnlPct };
       });
   });
 
@@ -222,7 +227,11 @@ export async function userRoutes(app: FastifyInstance) {
     const priceMap = new Map<string, number>((live?.holdings ?? []).map((h: any) => [h.currency, h.priceMxn]));
     return rows.map((r) => {
       const b = r.symbol.split('_')[0];
-      const price = priceMap.get(b) ?? 0;
+      // El triggerPrice está en la moneda de cotización del par (USDT o MXN).
+      const quoteCur = r.symbol.split('_')[1] ?? 'mxn';
+      const liveQuote = quoteCur === 'mxn' ? 1 : Number(priceMap.get(quoteCur) ?? 0) || 0;
+      const priceQuoteMxn = (priceMap.get(b) ?? 0);
+      const price = liveQuote > 0 ? priceQuoteMxn / liveQuote : priceQuoteMxn; // precio en la cotización
       const trigger = Number(r.triggerPrice);
       let distancePct = 0;
       if (price > 0 && trigger > 0) {
