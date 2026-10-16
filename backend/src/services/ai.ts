@@ -191,7 +191,7 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
   const spreadPct = mid > 0 && ask > bid ? ((ask - bid) / mid) * 100 : 0;
 
   const indLine = ind
-    ? `tendencia=${ind.trend} (EMA9/21 ${ind.emaSpreadPct >= 0 ? '+' : ''}${ind.emaSpreadPct}%) RSI14=${ind.rsi} ATR=${ind.atrPct}% momentum1h=${ind.momentumPct >= 0 ? '+' : ''}${ind.momentumPct}% volumen_rel=${ind.volRel}x bandas_bollinger=${ind.bbWidthPct}%`
+    ? `veredicto=${ind.stat} zScore=${ind.zScore} pos_bandas_bollinger=${ind.bbPos}% RSI14=${ind.rsi} tendencia=${ind.trend} (EMA9/21 ${ind.emaSpreadPct >= 0 ? '+' : ''}${ind.emaSpreadPct}%) ATR=${ind.atrPct}% momentum1h=${ind.momentumPct >= 0 ? '+' : ''}${ind.momentumPct}% volumen_rel=${ind.volRel}x ancho_bollinger=${ind.bbWidthPct}%`
     : 'no disponibles (usa precio y criterio)';
 
   const pnl =
@@ -203,14 +203,19 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
   const regimeLine = ctx.regime ? `régimen_mercado=${ctx.regime.zone} (${ctx.regime.score}/100)` : '';
 
   const criteria = ctx.aggressive
-    ? `CRITERIOS (SCALPING AGRESIVO): busca ENTRAR siempre que haya una mínima ventaja a favor. Compra si CUALQUIERA de estos se cumple: momentum1h > +0.2%, o tendencia ALCISTA, o RSI < 45 (dip/rebote), o rebote tras una caída. Tolera RSI hasta 75. PREFIERE ACTUAR antes que esperar. Responde HOLD SOLO si es claramente adverso (momentum negativo Y tendencia BAJISTA con RSI>70) o si el spread > 1%. Vende (SELL) para tomar ganancia en cuanto haya beneficio (aunque sea pequeño) o para cortar pérdida.`
-    : `CRITERIOS: compra solo con señales claras a favor (momentum y tendencia alcistas, RSI<70). Vende (SELL) para tomar ganancia o cortar pérdida. Si no hay ventaja clara, responde HOLD.`;
+    ? `ESTRATEGIA (REVERSIÓN A LA MEDIA — comprar barato, vender caro):
+- COMPRA cuando el activo esté BARATO: veredicto=BARATO, o zScore <= -1, o RSI < 35, o pos_bandas <= 20 (cerca de la banda inferior). Cuanto más barato, mayor confidence.
+- NO compres si está CARO (zScore >= 1.5, RSI > 70, pos_bandas >= 85), salvo tendencia claramente alcista.
+- VENDE para tomar ganancia cuando vuelva a la media o esté CARO: zScore >= -0.2, RSI > 58, pos_bandas >= 60, o si el PnL ya supera tu objetivo.
+- VENDE también para cortar pérdida si el precio cae por debajo del stopLoss.
+- Si está NEUTRO y sin ventaja clara, responde HOLD.`
+    : `ESTRATEGIA (REVERSIÓN): compra cuando el activo esté claramente BARATO (veredicto=BARATO, zScore<=-1, RSI<35); vende cuando esté CARO o al alcanzar tu objetivo. Si no hay ventaja clara, HOLD.`;
 
   return [
-    `Eres un trader profesional de cripto especializado en SCALPING ${ctx.aggressive ? 'AGRESIVO' : ''}: operaciones pequeñas, rápidas y frecuentes. Objetivo: ganar dinero aprovechando momentum y volatilidad, aunque la ganancia por operación sea pequeña. Nunca dejar correr una pérdida.`,
+    `Eres un trader cuantitativo de cripto: compras BARATO y vendes CARO (reversión a la media asistida por estadística). Objetivo: ganar dinero de forma consistente, aunque la ganancia por operación sea pequeña. Nunca dejar correr una pérdida.`,
     `PAR: ${symbol}`,
     `PRECIO: last=${t?.last ?? '-'} bid=${t?.bid ?? '-'} ask=${t?.ask ?? '-'} spread=${spreadPct.toFixed(2)}% vol24h=${t?.volume ?? '-'} (24h high=${t?.high ?? '-'} low=${t?.low ?? '-'})`,
-    `INDICADORES: ${indLine}`,
+    `ESTADÍSTICA: ${indLine}`,
     `EFECTIVO: MXN_disponible=${mxn?.available ?? '0'}`,
     `POSICIÓN: ${posLine}`,
     regimeLine,

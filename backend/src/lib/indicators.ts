@@ -12,6 +12,12 @@ export interface Indicators {
   momentumPct: number; // variación % de la última hora
   volRel: number; // volumen actual vs promedio (x)
   bbWidthPct: number; // ancho de Bandas de Bollinger (% del precio)
+  /** z-score: (precio - SMA20) / desviación. Negativo = barato, positivo = caro. */
+  zScore: number;
+  /** Posición dentro de las Bandas de Bollinger: 0 = banda inferior, 100 = superior. */
+  bbPos: number;
+  /** Veredicto estadístico de reversión. */
+  stat: 'BARATO' | 'CARO' | 'NEUTRO';
 }
 
 const BINANCE_HOSTS = [
@@ -122,6 +128,13 @@ export async function getIndicators(base: string): Promise<Indicators | null> {
     const trend: Indicators['trend'] =
       !isFinite(eF) || !isFinite(eS) ? 'LATERAL' : eF > eS * 1.0005 ? 'ALCISTA' : eF < eS * 0.9995 ? 'BAJISTA' : 'LATERAL';
 
+    // Reversión a la media: z-score y posición en Bandas de Bollinger.
+    const zScore = sd20 > 0 ? (last - sma20) / sd20 : 0;
+    const upper = sma20 + 2 * sd20;
+    const lower = sma20 - 2 * sd20;
+    const bbPos = upper > lower ? ((last - lower) / (upper - lower)) * 100 : 50;
+    const stat: Indicators['stat'] = zScore <= -1 || bbPos <= 20 ? 'BARATO' : zScore >= 1 || bbPos >= 80 ? 'CARO' : 'NEUTRO';
+
     const out: Indicators = {
       ok: true,
       source: 'binance-5m',
@@ -132,6 +145,9 @@ export async function getIndicators(base: string): Promise<Indicators | null> {
       momentumPct: Number(mom.toFixed(2)),
       volRel: avgVol > 0 ? Number((lastVol / avgVol).toFixed(2)) : 1,
       bbWidthPct: Number(bbWidth.toFixed(2)),
+      zScore: Number(zScore.toFixed(2)),
+      bbPos: Number(bbPos.toFixed(0)),
+      stat,
     };
     await kv.set(cacheKey, JSON.stringify(out), 60).catch(() => {});
     return out;
