@@ -10,6 +10,7 @@ import { Panel } from './Retro';
 export default function PayoutPanel() {
   const [info, setInfo] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
     const load = () => api('/me/payout-info').then(setInfo).catch(() => {});
@@ -33,6 +34,20 @@ export default function PayoutPanel() {
   const profit = Number(info.profit ?? 0);
   const ready = Number(info.withdrawableNow ?? 0);
   const working = Number(info.workingCapital ?? 0);
+
+  const markDone = async () => {
+    try {
+      await api('/me/deposits', {
+        method: 'POST',
+        body: JSON.stringify({ amount: ready, kind: 'WITHDRAWAL', note: 'retiro manual SPEI (bóveda de ganancias)' }),
+      });
+      setDone(true);
+      const fresh = await api('/me/payout-info');
+      setInfo(fresh);
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
     <Panel title="◈ GANANCIAS · RETIRAR AL BANCO">
@@ -61,6 +76,9 @@ export default function PayoutPanel() {
         </div>
         <button className="pixel-btn small" onClick={copy}>
           {copied ? '✔ COPIADA' : '📋 COPIAR CLABE'}
+        </button>
+        <button className="pixel-btn small" onClick={markDone} disabled={done || ready <= 0}>
+          {done ? '✔ REGISTRADO' : `✔ YA RETIRÉ $${ready.toFixed(2)}`}
         </button>
       </div>
 
