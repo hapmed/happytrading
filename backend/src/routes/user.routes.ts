@@ -396,7 +396,14 @@ export async function userRoutes(app: FastifyInstance) {
       });
       return { ok: true, withdrawal: w };
     } catch (err: any) {
-      return reply.code(400).send({ error: err.message });
+      const msg = String(err?.message ?? '');
+      if (/0202|no permission/i.test(msg)) {
+        return reply.code(400).send({
+          error:
+            'Tu API key de Bitso no tiene permiso de RETIROS. Actívalo en Bitso → Configuración → API Keys → edita la key y habilita "Retiros" (withdrawals). Luego vuelve a guardar la key en Config → Bitso.',
+        });
+      }
+      return reply.code(400).send({ error: msg });
     }
   });
 
