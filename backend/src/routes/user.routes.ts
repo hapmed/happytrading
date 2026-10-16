@@ -382,63 +382,6 @@ export async function userRoutes(app: FastifyInstance) {
     return { results, vaultBoughtMxn: boughtMxn, vaultAsset };
   });
 
-  // Bóveda de ganancias: cuánto se ha acumulado desde el último retiro + historial (gráfica).
-  app.get('/vault', { preHandler: [authenticate] }, async (req) => {
-    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    const deps = await prisma.deposit.findMany({ where: { userId: req.user.sub } });
-    const netDeposits = deps.reduce(
-      (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
-      0,
-    );
-    const invested = (user?.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
-    const basePnl = user?.vaultBasePnl ? Number(user.vaultBasePnl) : 0;
-
-    let currentValue = 0;
-    let availableMxn = 0;
-    let holdings: any[] = [];
-    try {
-      const live = await getLiveValuation(req.user.sub);
-      currentValue = live.currentValue;
-      holdings = live.holdings ?? [];
-      const mxnHolding = holdings.find((h: any) => String(h.currency).toLowerCase() === 'mxn');
-      availableMxn = mxnHolding ? Number(mxnHolding.valueMxn) : 0;
-    } catch {}
-
-    const vaultAsset = (user?.vaultAsset || 'usdc').toLowerCase();
-    const vh = holdings.find((h: any) => String(h.currency).toLowerCase() === vaultAsset);
-    const vaultQty = vh ? Number(vh.amount) : 0;
-    const vaultValue = vh ? Number(vh.valueMxn) : 0;
-
-    const pnl = currentValue - invested;
-    const vault = Math.max(0, pnl - basePnl);
-
-    // Historial de la bóveda (para la gráfica): a partir de los snapshots del portafolio.
-    const rows = await prisma.portfolioSnapshot.findMany({
-      where: { userId: req.user.sub },
-      orderBy: { capturedAt: 'asc' },
-      take: 300,
-    });
-    const history = rows.map((r) => ({
-      t: r.capturedAt,
-      v: Math.max(0, Number(r.totalMxn) - invested - basePnl),
-    }));
-    history.push({ t: new Date(), v: vault });
-
-    return {
-      vault,
-      pnl,
-      invested,
-      currentValue,
-      availableMxn,
-      vaultAsset,
-      vaultQty,
-      vaultValue,
-      // Puedes retirar hasta la bóveda (o lo que haya en caja, lo que sea menor).
-      withdrawableNow: Math.max(0, Math.min(vault, availableMxn)),
-      history,
-    };
-  });
-
   // "Ya retiré": registra el retiro y REINICIA la bóveda a 0.
   app.post('/vault/withdraw', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
