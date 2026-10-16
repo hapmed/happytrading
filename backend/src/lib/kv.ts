@@ -69,4 +69,7 @@ export const kv = {
   async expire(): Promise<void> {
     // no-op: la memoria no persiste TTL de los hashes (no es crítico)
   },
+  async del(key: string): Promise<void> {
+    store.delete(key);
+  },
 };

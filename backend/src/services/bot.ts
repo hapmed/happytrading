@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { kv } from '../lib/kv.js';
 import { decrypt } from '../lib/crypto.js';
 import { BitsoClient } from './bitso.js';
 import { generateSignal } from './ai.js';
@@ -7,6 +8,7 @@ import { valuePortfolio } from '../lib/portfolio.js';
 import { getRegime } from './regime.js';
 import { fixedFractionalSize } from '../lib/sizing.js';
 import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
+import { getIndicators } from '../lib/indicators.js';
 
 // Pares y umbrales por perfil de estrategia.
 const SYMBOLS: Record<string, string[]> = {
@@ -93,6 +95,8 @@ async function resolveSymbols(
     base = mxnBooks.length ? mxnBooks : SYMBOLS[profile] ?? SYMBOLS.balanced;
   } else if (c) {
     base = c.split(',').map((s) => s.trim()).filter(Boolean);
+    // Solo pares válidos contra MXN (evita libros en USD/BTC u otros inexistentes).
+    if (books.length) base = base.filter((bk) => validSet.has(bk) && bk.endsWith('_mxn'));
   } else {
     base = SYMBOLS[profile] ?? SYMBOLS.balanced;
   }
@@ -112,6 +116,22 @@ async function resolveSymbols(
  * No coloca órdenes — de eso se encarga el ejecutor "tonto".
  */
 export async function runBotForUser(userId: string): Promise<void> {
+  // Exclusión mutua por usuario: evita que dos pasadas (programada + inmediata)
+  // planifiquen sobre el mismo saldo a la vez y dupliquen planes/órdenes.
+  const lockKey = `bot:lock:${userId}`;
+  if (await kv.get(lockKey)) {
+    console.log(`[planner] ${userId} ya está en ejecución; se omite`);
+    return;
+  }
+  await kv.set(lockKey, String(Date.now()), 180);
+  try {
+    await planForUser(userId);
+  } finally {
+    await kv.del(lockKey);
+  }
+}
+
+async function planForUser(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.bitsoApiKey || !user.bitsoApiSecret || !user.tradingEnabled) return;
 
@@ -279,6 +299,10 @@ export async function runBotForUser(userId: string): Promise<void> {
       }
       const posQty = pos ? Number(pos.baseAmount) : 0;
       const avg = pos ? Number(pos.avgCostMxn) : 0;
+      const pnlPct = posQty > 0 && avg > 0 && last > 0 ? ((last - avg) / avg) * 100 : null;
+
+      // Indicadores técnicos reales (RSI, tendencia, ATR, momentum...) para el prompt.
+      const indicators = await getIndicators(base).catch(() => null);
 
       await setState(userId, 'ai_thinking', 'IA analizando mercado', symbol);
       await logEvent(userId, `IA analizando ${symbol}`, 'ai');
@@ -307,6 +331,9 @@ export async function runBotForUser(userId: string): Promise<void> {
         recentSignals: recentSignals.map((s) => ({ action: s.action, confidence: String(s.confidence ?? '0') })),
         position: { currency: base, amount: baseAvailable, avgCostMxn: avg > 0 ? avg : null },
         aggressive: profile === 'aggressive',
+        indicators,
+        regime: regime ? { zone: regime.zone, score: regime.score } : null,
+        pnlPct,
       };
 
       const signal = await generateSignal(symbol, ctx);
@@ -319,6 +346,12 @@ export async function runBotForUser(userId: string): Promise<void> {
       await logEvent(userId, `${symbol} → ${signal.action} (${(signal.confidence * 100).toFixed(0)}%)`, signal.action === 'HOLD' ? 'info' : 'ok');
 
       if (!user.autoTrade || signal.action === 'HOLD' || signal.confidence < minConf) continue;
+
+      // Si la IA ahora pide VENDER, cancela las escaleras de compra pendientes del par
+      // (evita planes contradictorios que se ejecutarían a la vez).
+      if (signal.action === 'SELL') {
+        await clearPending(userId, symbol);
+      }
 
       // Si ya hay un plan activo para este par, se conserva (no re-crear la escalera).
       const pendingCount = await prisma.instruction.count({ where: { userId, symbol, status: 'PENDING' } });

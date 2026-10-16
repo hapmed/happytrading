@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { kv } from '../lib/kv.js';
 import { config } from '../config.js';
 import { recordUsage, isProviderAllowed, markCall, setCooldown } from '../lib/usage.js';
+import type { Indicators } from '../lib/indicators.js';
 
 export interface MarketSignal {
   symbol: string;
@@ -30,6 +31,12 @@ export interface MarketContext {
   recentSignals: Array<{ action: string; confidence: string }>;
   position?: { currency: string; amount: number; avgCostMxn: number | null };
   aggressive?: boolean;
+  /** Indicadores técnicos (RSI, tendencia, ATR, momentum...) desde velas reales. */
+  indicators?: Indicators | null;
+  /** Régimen de mercado global. */
+  regime?: { zone: string; score: number } | null;
+  /** PnL no realizado de la posición actual (%). */
+  pnlPct?: number | null;
 }
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -177,21 +184,39 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
   const mxn = ctx.balances.find((b) => b.currency === 'mxn');
   const recent = ctx.recentSignals.map((s) => s.action[0]).join(',') || '-';
   const p = ctx.position;
+  const ind = ctx.indicators;
+  const bid = Number(t?.bid ?? 0);
+  const ask = Number(t?.ask ?? 0);
+  const mid = bid > 0 && ask > 0 ? (bid + ask) / 2 : Number(t?.last ?? 0);
+  const spreadPct = mid > 0 && ask > bid ? ((ask - bid) / mid) * 100 : 0;
+
+  const indLine = ind
+    ? `tendencia=${ind.trend} (EMA9/21 ${ind.emaSpreadPct >= 0 ? '+' : ''}${ind.emaSpreadPct}%) RSI14=${ind.rsi} ATR=${ind.atrPct}% momentum1h=${ind.momentumPct >= 0 ? '+' : ''}${ind.momentumPct}% volumen_rel=${ind.volRel}x bandas_bollinger=${ind.bbWidthPct}%`
+    : 'no disponibles (usa precio y criterio)';
+
+  const pnl =
+    ctx.pnlPct != null ? ` pnl_no_realizado=${ctx.pnlPct >= 0 ? '+' : ''}${ctx.pnlPct.toFixed(2)}%` : '';
   const posLine = p
-    ? `tienes=${p.amount} ${p.currency}${p.avgCostMxn ? ` costo_promedio=${p.avgCostMxn}` : ''}`
+    ? `tienes=${p.amount} ${p.currency.toUpperCase()}${p.avgCostMxn ? ` costo_promedio=${p.avgCostMxn} MXN${pnl}` : ''}`
     : 'tienes=0';
+
+  const regimeLine = ctx.regime ? `régimen_mercado=${ctx.regime.zone} (${ctx.regime.score}/100)` : '';
+
   return [
-    `Trader cripto${ctx.aggressive ? ' AGRESIVO (busca maximizar ganancia)' : ''}. Par ${symbol}.`,
-    `last=${t?.last ?? '-'} bid=${t?.bid ?? '-'} ask=${t?.ask ?? '-'} vol24h=${t?.volume ?? '-'}`,
-    `MXN_disponible=${mxn?.available ?? '0'}`,
-    posLine,
-    `señales_previas=${recent}`,
-    ctx.aggressive
-      ? `Estrategia AGRESIVA de SCALPING: prioriza monedas muy VOLÁTILES; compra pequeña y frecuente en el impulso; SELL rápido al primer beneficio o si el impulso se agota (para rotar). Objetivo: muchas compras/ventas pequeñas y rápidas.`
-      : `Si tienes el activo y conviene vender (o tomar ganancia / cortar pérdida) responde SELL.`,
-    `Incluye niveles numéricos: "entry" (precio de compra), "takeProfit" y "stopLoss".`,
-    `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=40 chars","entry":0,"takeProfit":0,"stopLoss":0}`,
-  ].join(' ');
+    `Eres un trader profesional de cripto especializado en SCALPING agresivo: operaciones pequeñas, rápidas y frecuentes. Objetivo: ganar dinero aprovechando momentum y volatilidad, aunque la ganancia por operación sea pequeña. Nunca dejar correr una pérdida.`,
+    `PAR: ${symbol}`,
+    `PRECIO: last=${t?.last ?? '-'} bid=${t?.bid ?? '-'} ask=${t?.ask ?? '-'} spread=${spreadPct.toFixed(2)}% vol24h=${t?.volume ?? '-'} (24h high=${t?.high ?? '-'} low=${t?.low ?? '-'})`,
+    `INDICADORES: ${indLine}`,
+    `EFECTIVO: MXN_disponible=${mxn?.available ?? '0'}`,
+    `POSICIÓN: ${posLine}`,
+    regimeLine,
+    `SEÑALES_PREVIAS=${recent}`,
+    `CRITERIOS: compra si el momentum y/o la tendencia favorecen subida (RSI<70; mejor si rebota desde RSI<40 con tendencia alcista). Vende (SELL) para tomar ganancia rápido o para cortar pérdida. Si no ves ventaja clara, responde HOLD.`,
+    `REGLAS: entry dentro de ±1% del mercado actual; takeProfit por ENCIMA de entry y stopLoss por DEBAJO (para BUY); relación ganancia/riesgo >= 1.2; no inventes precios ni datos.`,
+    `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=60 chars","entry":0,"takeProfit":0,"stopLoss":0}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function extractJson(text: string): any {

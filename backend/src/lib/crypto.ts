@@ -19,9 +19,22 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
 
 function getKey(): Buffer {
   const key = config.encryptionKey;
-  if (!key) return createHash('sha256').update('bitsobot-dev-key').digest();
+  if (!key) {
+    // Sin ENCRYPTION_KEY no ciframos: mejor fallar que guardar con clave pública.
+    throw new Error('ENCRYPTION_KEY no configurada: no se pueden cifrar/descifrar secretos');
+  }
   if (/^[0-9a-fA-F]{64}$/.test(key)) return Buffer.from(key, 'hex');
   return createHash('sha256').update(key).digest();
+}
+
+function decryptWith(key: Buffer, data: string): string {
+  const buf = Buffer.from(data, 'base64');
+  const iv = buf.subarray(0, 12);
+  const tag = buf.subarray(12, 28);
+  const enc = buf.subarray(28);
+  const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8');
 }
 
 /** Cifra una cadena con AES-256-GCM y la devuelve en base64 (iv|tag|ciphertext). */
@@ -35,14 +48,17 @@ export function encrypt(plain: string): string {
 }
 
 export function decrypt(data: string): string {
-  const key = getKey();
-  const buf = Buffer.from(data, 'base64');
-  const iv = buf.subarray(0, 12);
-  const tag = buf.subarray(12, 28);
-  const enc = buf.subarray(28);
-  const decipher = createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8');
+  try {
+    return decryptWith(getKey(), data);
+  } catch (err) {
+    // Compatibilidad con datos antiguos cifrados con la clave legacy de desarrollo.
+    const legacy = createHash('sha256').update('bitsobot-dev-key').digest();
+    try {
+      return decryptWith(legacy, data);
+    } catch {
+      throw err;
+    }
+  }
 }
 
 export function randomToken(bytes = 32): string {

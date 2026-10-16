@@ -16,8 +16,21 @@ import { ensureDefaults } from './lib/defaults.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
 
+// Orígenes permitidos. En producción el frontend se sirve desde el mismo origen,
+// así que CORS casi no se usa; en dev permitimos Vite. Se puede ampliar con CORS_ORIGINS.
+const DEFAULT_ORIGINS = [
+  'https://happytrading.hapmed.qzz.io',
+  'http://localhost:8082',
+  'http://127.0.0.1:8082',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+const allowedOrigins = config.corsOrigins.length ? config.corsOrigins : DEFAULT_ORIGINS;
+
 export async function buildApp() {
-  const app = Fastify({ logger: true });
+  // trustProxy: detrás del túnel de Cloudflare los IPs reales llegan en X-Forwarded-For.
+  // Sin esto, el rate limit vería a todos como 127.0.0.1 (límite global compartido).
+  const app = Fastify({ logger: true, trustProxy: true });
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
@@ -25,10 +38,19 @@ export async function buildApp() {
     }
     request.log.error(error);
     const status = (error as any).statusCode ?? 500;
-    reply.code(status).send({ error: error.message ?? 'Error interno' });
+    // Nunca filtrar mensajes internos en errores 5xx (nombres de tablas, etc.).
+    const message = status >= 500 ? 'Error interno' : error.message || 'Error';
+    reply.code(status).send({ error: message });
   });
 
-  await app.register(cors, { origin: true, credentials: true });
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      // Sin Origin (clientes nativos, widget iOS, curl) → permitir.
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      cb(null, false);
+    },
+    credentials: false,
+  });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
   await app.register(jwt, { secret: config.jwtSecret });
 

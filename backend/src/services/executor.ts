@@ -33,6 +33,9 @@ async function applyPosition(userId: string, symbol: string, side: 'BUY' | 'SELL
 // Evita rotar demasiado seguido (máx. 1 vez por minuto por usuario)
 const rotateCooldown = new Map<string, number>();
 
+// Tras un reinicio, las instrucciones que quedaron "en proceso" se recuperan una vez.
+let recoveredProcessing = false;
+
 /**
  * Sin MXN suficiente: VENDE la posición más rentable (o la que alcance) para fondear la compra.
  * Sacrifica la posición actual para no perder una mejor oportunidad (la estrategia siempre busca ganar).
@@ -96,6 +99,14 @@ export async function runExecutorAll(): Promise<void> {
   });
   if (!users.length) return;
 
+  // Recuperación tras reinicio: instrucciones que quedaron en PROCESSING vuelven a PENDING.
+  if (!recoveredProcessing) {
+    recoveredProcessing = true;
+    await prisma.instruction
+      .updateMany({ where: { status: 'PROCESSING' }, data: { status: 'PENDING' } })
+      .catch(() => {});
+  }
+
   const [instructions, positions] = await Promise.all([
     prisma.instruction.findMany({
       where: { status: 'PENDING', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
@@ -114,17 +125,28 @@ export async function runExecutorAll(): Promise<void> {
   for (const u of users) {
     clients.set(u.id, new BitsoClient({ apiKey: decrypt(u.bitsoApiKey!), apiSecret: decrypt(u.bitsoApiSecret!) }));
   }
-  const anyClient = [...clients.values()][0];
+  const clientList = [...clients.values()];
 
-  const limits = await getBookLimits(anyClient).catch(() => new Map<string, BookLimits>());
+  // Límites de libro: se prueban los clientes hasta que uno responda
+  // (una key inválida no debe bloquear a TODOS los usuarios).
+  let limits = new Map<string, BookLimits>();
+  for (const c of clientList) {
+    try {
+      limits = await getBookLimits(c);
+      break;
+    } catch {}
+  }
 
-  // Precios (una vez por símbolo) — SIN IA
+  // Precios (una vez por símbolo) — SIN IA, con fallback entre clientes
   const priceMap = new Map<string, number>();
   for (const sym of symbols) {
-    try {
-      const t = await anyClient.ticker(sym);
-      priceMap.set(sym, Number(t.last ?? 0));
-    } catch {}
+    for (const c of clientList) {
+      try {
+        const t = await c.ticker(sym);
+        priceMap.set(sym, Number(t.last ?? 0));
+        break;
+      } catch {}
+    }
   }
 
   // Saldos MXN por usuario (para no comprar sin fondos)
@@ -150,7 +172,16 @@ export async function runExecutorAll(): Promise<void> {
       (ins.trigger === 'price_above' && price >= Number(ins.triggerPrice));
     if (!fire) continue;
 
+    // Reclamo atómico: sólo un ciclo puede tomar la instrucción (evita órdenes duplicadas).
+    const claimed = await prisma.instruction.updateMany({
+      where: { id: ins.id, status: 'PENDING' },
+      data: { status: 'PROCESSING' },
+    });
+    if (claimed.count !== 1) continue;
+
     const client = clients.get(ins.userId)!;
+    const release = () =>
+      prisma.instruction.update({ where: { id: ins.id }, data: { status: 'PENDING' } }).catch(() => {});
     try {
       if (ins.side === 'BUY') {
         const minor = Number(ins.amountMxn ?? 0);
@@ -170,6 +201,7 @@ export async function runExecutorAll(): Promise<void> {
           } else {
             await logEvent(user.id, `Sin MXN ($${mxn.toFixed(2)}) ni posiciones para fondear ${ins.symbol}`, 'info');
           }
+          await release();
           continue;
         }
         await logEvent(user.id, `⚙ Worker: BUY ${ins.symbol} @ ${price}`, 'ok');
@@ -182,6 +214,8 @@ export async function runExecutorAll(): Promise<void> {
         });
         await applyPosition(user.id, ins.symbol, 'BUY', price > 0 ? minor / price : 0, price);
         await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'EXECUTED', executedAt: new Date(), tradeId: trade.id } });
+        // Descontar el MXN gastado para no sobre-comprar en la misma pasada.
+        mxnMap.set(ins.userId, Math.max(0, mxn - minor));
         await queueNotification(user.id, 'TRADE', `BUY ${ins.symbol} (plan IA)`, `${ins.reason ?? ''} @ ${price}`);
       } else {
         const qty = Number(ins.quantity ?? 0);
@@ -205,6 +239,7 @@ export async function runExecutorAll(): Promise<void> {
         await queueNotification(user.id, 'TRADE', `SELL ${ins.symbol} (plan IA)`, `${ins.reason ?? ''} @ ${price}`);
       }
     } catch (err) {
+      await release();
       await logEvent(user.id, `Worker error ${ins.symbol}: ${(err as Error).message.slice(0, 60)}`, 'error');
     }
   }

@@ -8,11 +8,11 @@ services:
       NODE_ENV: production
       # Usa TU Postgres existente (host "postgres" en la red apps-net)
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
-      JWT_SECRET: ${JWT_SECRET}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET es obligatorio (mín. 32 caracteres)}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY es obligatorio (mín. 32 caracteres)}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-hapmed}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@happytrading.app}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD es obligatorio}
       REGISTRATION_TOKEN: ${REGISTRATION_TOKEN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}

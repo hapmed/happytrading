@@ -18,7 +18,7 @@ const loginSchema = z.object({
 });
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/register', async (req, reply) => {
+  app.post('/register', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = registerSchema.parse(req.body);
 
     // Anti-bots: token de registro (se configura desde el panel admin o por .env)
@@ -45,7 +45,7 @@ export async function authRoutes(app: FastifyInstance) {
     return { token, refresh, user: serializeUser(user) };
   });
 
-  app.post('/login', async (req, reply) => {
+  app.post('/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req, reply) => {
     const body = loginSchema.parse(req.body);
     const id = body.identifier.toLowerCase();
     const user = await prisma.user.findFirst({
@@ -66,7 +66,10 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       const decoded = app.jwt.verify<{ sub: string; role: string; type?: string }>(refresh);
       if (decoded.type !== 'refresh') return reply.code(401).send({ error: 'Token inválido' });
-      const token = app.jwt.sign({ sub: decoded.sub, role: decoded.role }, { expiresIn: '15m' });
+      // Revalidar contra la BD: estado y rol actuales (no confiar en el token).
+      const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
+      if (!user || user.status !== 'ACTIVE') return reply.code(401).send({ error: 'Sesión inválida' });
+      const token = app.jwt.sign({ sub: user.id, role: user.role }, { expiresIn: '15m' });
       return { token };
     } catch {
       return reply.code(401).send({ error: 'Token inválido' });
