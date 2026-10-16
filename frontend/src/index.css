@@ -155,7 +155,7 @@ a:hover {
 /* ---------- Dashboard: 1 columna en móvil; en PC se reparte en columnas ---------- */
 .dash {
   width: 100%;
-  max-width: 1500px;
+  max-width: 2200px;
   margin: 0 auto;
 }
 .dash > * {
@@ -165,24 +165,25 @@ a:hover {
   min-width: 0;
 }
 @media (min-width: 900px) {
-  /* Distribución tipo "masonry": llena las columnas sin dejar huecos */
+  /* Distribución tipo "Tetris": columnas angostas (ancho móvil) que se llenan sin huecos */
   .dash {
     column-count: 2;
-    column-gap: 18px;
+    column-gap: 16px;
   }
   .dash > * {
     break-inside: avoid;
     -webkit-column-break-inside: avoid;
     page-break-inside: avoid;
   }
-  /* Los paneles destacados ocupan todo el ancho */
-  .dash-full {
-    column-span: all;
-  }
 }
-@media (min-width: 1500px) {
+@media (min-width: 1300px) {
   .dash {
     column-count: 3;
+  }
+}
+@media (min-width: 1750px) {
+  .dash {
+    column-count: 4;
   }
 }
 .dash .pixel-panel { margin-bottom: 0; }
