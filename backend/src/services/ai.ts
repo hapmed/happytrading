@@ -50,8 +50,8 @@ const OPENROUTER_FALLBACKS = [
   'thinkingmachines/inkling:free',
 ];
 
-const CALL_TIMEOUT = 10_000; // por intento
-const SIGNAL_BUDGET = 18_000; // máximo por señal (luego devuelve HOLD)
+const CALL_TIMEOUT = 12_000; // por intento
+const SIGNAL_BUDGET = 25_000; // máximo por señal (luego devuelve HOLD)
 const MAX_PER_PROVIDER = 2; // intentos por proveedor (rápido)
 
 function sleep(ms: number): Promise<void> {
