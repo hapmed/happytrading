@@ -712,9 +712,11 @@ async function planForUser(userId: string): Promise<void> {
           : takeProfitPct > 0 ? entry * (1 + takeProfitPct / 100) : 0;
         for (let i = 0; i < levels; i++) {
           const price = entry * (1 - (i * dcaStepPct) / 100);
+          // Nivel 1: entra YA (mercado) para no perder la fluctuación; el resto espera el dip.
+          const trig = i === 0 ? 'immediate' : 'price_below';
           await prisma.instruction.create({
             data: {
-              userId, symbol, side: 'BUY', trigger: 'price_below', triggerPrice: String(price),
+              userId, symbol, side: 'BUY', trigger: trig, triggerPrice: String(price),
               amountMxn: String(per), reason: `${signal.reasoning} (DCA ${i + 1}/${levels})`, status: 'PENDING', expiresAt: expires,
               slPriceMxn: sl > 0 ? String(sl) : null, tpPriceMxn: tp > 0 ? String(tp) : null,
             },
