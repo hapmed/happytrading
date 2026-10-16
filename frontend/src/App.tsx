@@ -9,14 +9,14 @@ import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 import HowItWorks from './pages/HowItWorks';
 import Scriptable from './pages/Scriptable';
-import { isMuted, setMuted } from './lib/sfx';
+
 
 const TICKER = 'BTC/MXN ▲ · ETH/MXN ▼ · XRP/MXN ▲ · LTC/MXN ▲ · MANA/MXN ▼ · SOL/MXN ▲ · DAI/MXN ◆';
 
 function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
-  const [soundOn, setSoundOn] = React.useState(!isMuted());
+
 
   return (
     <div className="app-shell">
@@ -51,17 +51,6 @@ function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="nav-user">
           <span>▸ {user?.username || user?.email}</span>
-          <button
-            className="pixel-btn small ghost"
-            title="Sonido 8-bit"
-            onClick={() => {
-              const next = !soundOn;
-              setSoundOn(next);
-              setMuted(!next);
-            }}
-          >
-            {soundOn ? '🔊' : '🔇'}
-          </button>
           <button className="pixel-btn small danger" onClick={() => { logout(); nav('/login'); }}>
             SALIR
           </button>

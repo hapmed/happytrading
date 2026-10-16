@@ -1,6 +1,6 @@
 // Sonidos 8-bit sintetizados (Web Audio), sin archivos.
 let ctx: AudioContext | null = null;
-let muted = typeof localStorage !== 'undefined' && localStorage.getItem('sfx') === 'off';
+let muted = false; // sonido SIEMPRE activado
 
 function ac(): AudioContext | null {
   try {
