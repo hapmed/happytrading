@@ -330,9 +330,9 @@ async function planForUser(userId: string): Promise<void> {
     await logEvent(userId, `Régimen: ${regime.zone} (${regime.score}/100)`, regime.zone === 'RISK_OFF' ? 'warn' : 'info');
   }
 
-  // ── Bóveda de ganancias (moneda estable) ───────────────────────────
+  // ── Capital de trabajo y retiro automático a la CLABE ──────────────
   // El bot opera SOLO con el capital invertido (capital inicial + depósitos).
-  // La ganancia se mueve a una MONEDA ESTABLE (USDC/USDT) y NO se opera.
+  // La ganancia por encima se transfiere a tu banco (SPEI → CLABE) si está activado.
   const deps = await prisma.deposit.findMany({ where: { userId } });
   const netDeposits = deps.reduce(
     (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
@@ -340,83 +340,89 @@ async function planForUser(userId: string): Promise<void> {
   );
   const workingCapital = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
 
-  // Valor actual de la bóveda (posiciones reservadas).
-  const reservedPositions = await prisma.position.findMany({ where: { userId, reserved: true } });
-  let vaultValue = 0;
-  for (const p of reservedPositions) {
-    try {
-      const t = await client.ticker(p.symbol);
-      vaultValue += Number(p.baseAmount) * Number(t.last ?? 0);
-    } catch {}
-  }
-
-  let equityQuote = Math.max(0, equityMxn - vaultValue);
+  // Precio de la cotización en MXN (USDT→MXN) para convertir.
+  let quoteToMxn = 1;
   if (quote !== 'mxn') {
     try {
       const t = await client.ticker(`${quote}_mxn`);
       const p = Number(t.last ?? 0);
-      if (p > 0) equityQuote = equityQuote / p;
+      if (p > 0) quoteToMxn = p;
     } catch {}
   }
+  const equityQuote = equityMxn / quoteToMxn;
   const cryptoValue = Math.max(0, equityQuote - cashAvailable);
   let profitReserve = Math.max(0, equityQuote - workingCapital);
   if (movements.withdrawn > 0) {
-    // Retiro detectado automáticamente → REINICIA la bóveda (vuelve a $0).
     profitReserve = 0;
-    await prisma.user
-      .update({ where: { id: userId }, data: { vaultBasePnl: String(equityQuote - workingCapital) } })
-      .catch(() => {});
-    await logEvent(userId, `🔄 Bóveda reiniciada por retiro detectado ($${movements.withdrawn.toFixed(2)})`, 'ok');
+    await logEvent(userId, `💰 Retiro detectado ($${movements.withdrawn.toFixed(2)} MXN)`, 'ok');
   }
 
-  // Mueve la ganancia a la moneda estable de la bóveda (no se opera).
   const cashReserveAmount = equityMxn * (cashReservePct / 100);
-  if (quote === 'mxn' && user.vaultEnabled && profitReserve >= 10) {
-    const vsym = `${vaultAsset}_mxn`;
-    const lim = limits.get(vsym);
-    const minVal = Math.max(1, lim?.minimumValue ?? 1);
-    let sweep = Math.min(profitReserve, cashAvailable - cashReserveAmount);
-    if (sweep < minVal) sweep = 0;
-    if (sweep > 0) {
+
+  // ── Retiro automático de ganancias a la CLABE (Binance → SPEI) ─────
+  const PAYOUT_MIN_MXN = 100;
+  if (user.payoutEnabled && user.payoutClabe && user.payoutBeneficiary && profitReserve > 0) {
+    const profitMxn = profitReserve * quoteToMxn;
+    if (profitMxn >= PAYOUT_MIN_MXN) {
       try {
-        const t = await client.ticker(vsym);
-        const price = Number(t.last ?? 0);
-        if (price > 0) {
-          const order = await client.placeOrder({ book: vsym, side: 'buy', type: 'market', minor: String(Math.round(sweep * 100) / 100) });
-          await prisma.trade.create({
-            data: {
-              userId, symbol: vsym, side: 'BUY', amount: String(Math.round(sweep * 100) / 100), price: String(price),
-              status: 'PENDING', source: 'AI', reason: 'Bóveda de ganancias (moneda estable)',
-              externalId: order?.oid ? String(order.oid) : null,
-            },
-          });
-          const qty = sweep / price;
-          const ex = await prisma.position.findUnique({ where: { userId_symbol: { userId, symbol: vsym } } });
-          const oldQty = ex ? Number(ex.baseAmount) : 0;
-          const oldCost = ex ? Number(ex.avgCostMxn) : 0;
-          const newQty = oldQty + qty;
-          const newAvg = newQty > 0 ? (oldQty * oldCost + qty * price) / newQty : price;
-          await prisma.position.upsert({
-            where: { userId_symbol: { userId, symbol: vsym } },
-            update: { baseAmount: String(newQty), avgCostMxn: String(newAvg), reserved: true },
-            create: { userId, symbol: vsym, baseAmount: String(newQty), avgCostMxn: String(newAvg), reserved: true },
-          });
-          profitReserve = Math.max(0, profitReserve - sweep);
-          await logEvent(userId, `🏦 Bóveda: moví $${sweep.toFixed(2)} de ganancia a ${vaultAsset.toUpperCase()} (no se opera)`, 'ok');
+        const payoutKey = `payout:${userId}:${new Date().toISOString().slice(0, 13)}`; // máx 1/hora
+        if (!(await kv.get(payoutKey))) {
+          // Si la cotización no es MXN, convierte la ganancia a MXN vendiendo quote→MXN.
+          if (quote !== 'mxn') {
+            const needQuote = Math.min(profitReserve, cashAvailable);
+            const sym = `${quote}_mxn`;
+            const lim = limits.get(sym);
+            const needMxn = needQuote * quoteToMxn;
+            if (needQuote > 0 && !(lim && needMxn < (lim.minimumValue ?? 0))) {
+              const t = await client.ticker(sym);
+              const px = Number(t.last ?? 0);
+              if (px > 0) {
+                const o = await client.placeOrder({ book: sym, side: 'sell', type: 'market', major: String(needQuote) });
+                await prisma.trade.create({
+                  data: {
+                    userId, symbol: sym, side: 'SELL', amount: String(needQuote), price: String(px),
+                    status: 'PENDING', source: 'AI', reason: 'Realizar ganancia para retiro',
+                    externalId: o?.oid ? String(o.oid) : null,
+                  },
+                });
+                await logEvent(userId, `💱 Vendiendo ${quote.toUpperCase()} → MXN para retirar`, 'info');
+                await new Promise((r) => setTimeout(r, 4000));
+              }
+            }
+          }
+          const bals2 = await client.balance();
+          const mxnAvail = Number(bals2.find((b: any) => String(b.currency).toLowerCase() === 'mxn')?.available ?? 0);
+          const amount = Math.min(mxnAvail, profitMxn);
+          if (amount >= 50) {
+            const w = await (client as any).fiatWithdrawMxn({
+              amountMxn: Math.round(amount * 100) / 100,
+              clabe: user.payoutClabe,
+              beneficiary: user.payoutBeneficiary,
+              bank: user.payoutBank ?? undefined,
+            });
+            await prisma.deposit.create({
+              data: {
+                userId, currency: 'mxn', amount: String(Math.round(amount * 100) / 100), kind: 'WITHDRAWAL',
+                note: `binance-spei:${w?.orderId ?? w?.id ?? 'retiro'}`,
+              },
+            });
+            await kv.set(payoutKey, '1', 3600);
+            await logEvent(userId, `🏦 Retiro automático a tu CLABE: $${amount.toFixed(2)} MXN`, 'ok');
+          }
         }
       } catch (err) {
-        await logEvent(userId, `No se pudo mover a la bóveda: ${(err as Error).message.slice(0, 50)}`, 'warn');
+        await logEvent(userId, `No se pudo retirar a la CLABE: ${(err as Error).message.slice(0, 70)}`, 'warn');
       }
     }
   }
 
   const reservePct = cashReserveAmount;
-  // Efectivo disponible para operar (sin tocar la bóveda).
+  // Efectivo disponible para operar (sin tocar la ganancia reservada).
   let cashRemaining = Math.max(0, Math.min(cashAvailable - profitReserve - reservePct, workingCapital - cryptoValue));
-  if (profitReserve > 0.5 || vaultValue > 0.5) {
+  if (profitReserve > 0.5) {
     await logEvent(
       userId,
-      `💰 Ganancias: $${profitReserve.toFixed(2)} en caja · bóveda ${vaultAsset.toUpperCase()}: $${vaultValue.toFixed(2)}`,
+      `💰 Ganancia acumulada: $${(profitReserve * quoteToMxn).toFixed(2)} MXN (se retira al llegar a $${PAYOUT_MIN_MXN})`,
       'info',
     );
   }
