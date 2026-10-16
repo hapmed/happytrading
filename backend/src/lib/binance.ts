@@ -67,24 +67,41 @@ export class BinanceClient {
     }
   }
 
-  // ── Saldos ────────────────────────────────────────────────────────
+  // ── Saldos (Spot + Funding, para no "perder" fondos que se movieron de cartera) ──
   async balance(): Promise<Array<{ currency: string; available: string; locked: string; total: string }>> {
-    const d = await this.request<{ balances: Array<{ asset: string; free: string; locked: string }> }>(
-      'GET',
-      '/api/v3/account',
-      {},
-      true,
-    );
-    return (d.balances ?? []).map((b) => {
-      const free = Number(b.free ?? 0);
-      const locked = Number(b.locked ?? 0);
-      return {
-        currency: String(b.asset).toLowerCase(),
-        available: String(free),
-        locked: String(locked),
-        total: String(free + locked),
-      };
-    });
+    const [spot, funding] = await Promise.all([
+      this.request<{ balances: Array<{ asset: string; free: string; locked: string }> }>('GET', '/api/v3/account', {}, true),
+      this.request<any>('POST', '/sapi/v1/asset/get-funding-asset', {}, true).catch(() => []),
+    ]);
+    const map = new Map<string, { free: number; locked: number }>();
+    const add = (asset: string, free: number, locked: number) => {
+      const cur = String(asset).toLowerCase();
+      const prev = map.get(cur) ?? { free: 0, locked: 0 };
+      map.set(cur, { free: prev.free + free, locked: prev.locked + locked });
+    };
+    for (const b of spot.balances ?? []) add(b.asset, Number(b.free ?? 0), Number(b.locked ?? 0));
+    for (const f of Array.isArray(funding) ? funding : []) {
+      add(f.asset, Number(f.free ?? 0), Number(f.freeze ?? 0) + Number(f.locked ?? 0) + Number(f.withdrawing ?? 0));
+    }
+    return [...map.entries()].map(([currency, v]) => ({
+      currency,
+      available: String(v.free),
+      locked: String(v.locked),
+      total: String(v.free + v.locked),
+    }));
+  }
+
+  /** Mueve fondos de la cartera Funding a Spot (para que el bot pueda operar). */
+  async sweepFundingToSpot(): Promise<void> {
+    try {
+      const f = await this.request<any>('POST', '/sapi/v1/asset/get-funding-asset', {}, true);
+      for (const a of Array.isArray(f) ? f : []) {
+        const amt = Number(a.free ?? 0);
+        if (amt > 0 && ['usdt', 'mxn', 'usdc'].includes(String(a.asset).toLowerCase())) {
+          await this.request('POST', '/sapi/v1/asset/transfer', { type: 'FUNDING_MAIN', asset: a.asset, amount: String(amt) }, true).catch(() => {});
+        }
+      }
+    } catch {}
   }
 
   // ── Precio (ticker 24h) ───────────────────────────────────────────

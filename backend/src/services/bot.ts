@@ -252,6 +252,9 @@ async function planForUser(userId: string): Promise<void> {
   const exch = 'binance';
   const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
 
+  // Rescata fondos que estén en la cartera Funding (para que el bot pueda operar).
+  await (client as any).sweepFundingToSpot?.();
+
   const limits = await getBookLimits(client, exch).catch(() => new Map<string, BookLimits>());
 
   await setState(userId, 'reading_balance', 'Leyendo saldo');
