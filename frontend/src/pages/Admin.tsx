@@ -185,6 +185,7 @@ export default function Admin() {
           </Panel>
 
           <Panel title="◈ USUARIOS REGISTRADOS">
+            <div className="table-scroll">
             <table className="retro-table">
               <thead>
                 <tr>
@@ -221,6 +222,7 @@ export default function Admin() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Panel>
         </>
       )}

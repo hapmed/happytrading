@@ -1,11 +1,18 @@
 const BASE = '/api';
 
 async function raw(path: string, opts: RequestInit = {}) {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...((opts.headers as Record<string, string>) ?? {}) };
   if (opts.body) headers['Content-Type'] = 'application/json';
   const token = localStorage.getItem('token');
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(BASE + path, { ...opts, headers });
+  // Timeout de 15s: evita que una petición colgada bloquee la UI para siempre.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    return await fetch(BASE + path, { ...opts, headers, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function tryRefresh(): Promise<boolean> {
@@ -52,6 +59,10 @@ export async function api(path: string, opts: RequestInit = {}): Promise<any> {
   }
 
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? `Error de red (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error ?? `Error de red (${res.status})`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }

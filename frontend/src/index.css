@@ -339,7 +339,7 @@ a:hover {
 .livebar.off .livebar-title { color: var(--muted); }
 .livebar-state { font-family: var(--font-pixel); font-size: 8px; color: var(--cyan); animation: gainBlink 1.4s ease-in-out infinite; }
 .livebar-eq { display: flex; align-items: flex-end; gap: 3px; height: 16px; }
-.livebar-eq i { width: 4px; height: 6px; background: var(--green); animation: eq 0.9s ease-in-out infinite; }
+.livebar-eq i { width: 4px; height: 16px; transform-origin: bottom center; background: var(--green); animation: eq 0.9s ease-in-out infinite; }
 .livebar-next { margin-left: auto; font-family: var(--font-pixel); font-size: 8px; color: var(--yellow); }
 
 .statuspanel.auto-on { border-color: var(--green); }
@@ -962,7 +962,8 @@ a:hover {
 }
 .act-eq span {
   width: 8px;
-  height: 8px;
+  height: 32px;
+  transform-origin: bottom center;
   background: var(--green);
   animation: eq 1s ease-in-out infinite;
 }
@@ -970,9 +971,10 @@ a:hover {
   background: var(--yellow);
   animation-duration: 0.3s;
 }
+/* scaleY en vez de height: no fuerza layout (mejor rendimiento en móvil) */
 @keyframes eq {
-  0%, 100% { height: 6px; }
-  50% { height: 32px; }
+  0%, 100% { transform: scaleY(0.18); }
+  50% { transform: scaleY(1); }
 }
 
 .act-msg {
@@ -1477,4 +1479,46 @@ a:hover {
   .auto-sub { font-size: 14px; }
   .auto-hint { display: none; }
   .chart { height: 150px; }
+}
+
+/* ── Pantalla de error (ErrorBoundary) ─────────────────────────────── */
+.crash-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.crash-title {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  color: var(--red);
+  margin-bottom: 10px;
+}
+.crash-detail {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--yellow);
+  max-width: 90vw;
+  overflow: auto;
+  white-space: pre-wrap;
+  margin: 10px 0;
+}
+
+/* ── Accesibilidad: respeta "reducir movimiento" ───────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Tablas: scroll horizontal en móvil (no recortar columnas) ────── */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

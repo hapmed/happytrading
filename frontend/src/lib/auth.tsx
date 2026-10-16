@@ -49,9 +49,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     api('/me/profile')
       .then((u) => setUser(u))
-      .catch(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh');
+      .catch((err) => {
+        // Solo cerrar sesión si el servidor rechazó el token (401).
+        // Si es un error de red transitorio (reinicio), NO expulsar al usuario.
+        if ((err as any)?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('refresh');
+        }
       })
       .finally(() => setLoading(false));
   }, []);

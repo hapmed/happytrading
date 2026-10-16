@@ -121,7 +121,7 @@ async function callOpenRouter(model: string, apiKey: string, prompt: string): Pr
   const body = {
     model,
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: 512,
+    max_tokens: 800,
     temperature: 0.2,
     response_format: { type: 'json_object' },
   };
@@ -285,7 +285,9 @@ async function callOpenaiCompat(p: CustomProvider, model: string, prompt: string
   const body = {
     model,
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: 400,
+    // 900 tokens: algunos modelos "razonan" antes de responder y necesitan espacio
+    // para no devolver el contenido vacío (se corta y responde solo el pensamiento).
+    max_tokens: 900,
     temperature: 0.2,
   };
   const start = Date.now();
@@ -298,7 +300,12 @@ async function callOpenaiCompat(p: CustomProvider, model: string, prompt: string
     });
     const latencyMs = Date.now() - start;
     const data: any = await res.json().catch(() => ({}));
-    const content = data?.choices?.[0]?.message?.content;
+    let content = data?.choices?.[0]?.message?.content;
+    // Respaldo: si el contenido vino vacío pero hay "reasoning", intenta sacar el JSON de ahí.
+    if (!content && typeof data?.choices?.[0]?.message?.reasoning === 'string') {
+      const m = String(data.choices[0].message.reasoning).match(/\{[\s\S]*\}/);
+      if (m) content = m[0];
+    }
     if (res.ok && content) {
       const tokens = data?.usage?.total_tokens ?? 0;
       recordUsage(p.name, tokens, true);

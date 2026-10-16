@@ -4,11 +4,13 @@ const COLORS = ['#00ff9d', '#00e5ff', '#ff2e88', '#ffe600', '#ff8a00', '#a259ff'
 
 export default function Donut({ holdings, total }: { holdings: any[]; total: number }) {
   const [ready, setReady] = useState(false);
+  // Dependencia estable: solo re-anima si CAMBIAN los datos (no en cada poll).
+  const signature = holdings.map((h) => `${h.currency}:${h.valueMxn}`).join('|');
   useEffect(() => {
     setReady(false);
     const t = setTimeout(() => setReady(true), 80);
     return () => clearTimeout(t);
-  }, [holdings]);
+  }, [signature]);
 
   const sum = holdings.reduce((s, h) => s + Number(h.valueMxn || 0), 0) || 1;
   const r = 38;
