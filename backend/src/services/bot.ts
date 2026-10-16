@@ -256,9 +256,6 @@ async function planForUser(userId: string): Promise<void> {
   const exch = 'binance';
   const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
 
-  // Rescata fondos que estén en la cartera Funding (para que el bot pueda operar).
-  await (client as any).sweepFundingToSpot?.();
-
   const limits = await getBookLimits(client, exch).catch(() => new Map<string, BookLimits>());
 
   await setState(userId, 'reading_balance', 'Leyendo saldo');
@@ -299,7 +296,12 @@ async function planForUser(userId: string): Promise<void> {
   }
 
   const cashBal = balances.find((b) => String(b.currency).toLowerCase() === quote);
-  const cashAvailable = Number(cashBal?.available ?? '0');
+  // Efectivo para OPERAR = solo Spot (la bóveda vive en Funding y no se toca).
+  let cashAvailable = Number(cashBal?.available ?? '0');
+  try {
+    const sp = await (client as any).spotBalance?.();
+    if (sp) cashAvailable = Number(sp.find((b: any) => b.currency === quote)?.available ?? 0);
+  } catch {}
 
   // Movimientos reales del exchange (retiros) → NO cuentan como ganancia y reinician la bóveda.
   const movements = await syncBitsoMovements(userId, client);
@@ -407,6 +409,32 @@ async function planForUser(userId: string): Promise<void> {
 
   const cashReserveAmount = equityQuote * (cashReservePct / 100);
 
+  // ── BÓVEDA: convierte la ganancia a MXN y la guarda en Funding (estable, fuera del trading) ──
+  try {
+    const funding = await (client as any).fundingBalance?.();
+    const fundingMxn = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+    const pendingMxn = vaultMxn - fundingMxn; // lo que falta por pasar a MXN
+    if (pendingMxn >= 36 && quote !== 'mxn' && cashAvailable >= 2) {
+      const fromAmount = Math.min(Number((pendingMxn / quoteToMxn).toFixed(2)), Number(cashAvailable.toFixed(2)));
+      if (fromAmount >= 2) {
+        await (client as any).convert(quote.toUpperCase(), 'MXN', fromAmount);
+        await new Promise((r) => setTimeout(r, 2500));
+        const sp = await (client as any).spotBalance?.();
+        const mxnSpot = Number(sp?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+        if (mxnSpot >= 1) {
+          await (client as any).transfer('MAIN_FUNDING', 'MXN', Number(mxnSpot.toFixed(2)));
+        }
+        await logEvent(
+          userId,
+          `🏦 Bóveda: convertí la ganancia a MXN y la guardé (fuera del trading, sin variar)`,
+          'ok',
+        );
+      }
+    }
+  } catch (err) {
+    await logEvent(userId, `No se pudo guardar en la bóveda: ${(err as Error).message.slice(0, 60)}`, 'warn');
+  }
+
   // ── Retiro automático de ganancias a la CLABE (Binance → SPEI) ─────
   const PAYOUT_MIN_MXN = 50; // mínimo de retiro SPEI en Binance (verificado en su API)
   if (user.payoutEnabled && user.payoutClabe && user.payoutBeneficiary && vaultMxn > 0) {
@@ -414,32 +442,27 @@ async function planForUser(userId: string): Promise<void> {
       try {
         const payoutKey = `payout:${userId}:${new Date().toISOString().slice(0, 13)}`; // máx 1/hora
         if (!(await kv.get(payoutKey))) {
-          // Si la cotización no es MXN, convierte la ganancia a MXN vendiendo quote→MXN.
-          if (quote !== 'mxn') {
-            const needQuote = Math.min(profitReserve, cashAvailable);
-            const sym = `${quote}_mxn`;
-            const lim = limits.get(sym);
-            const needMxn = needQuote * quoteToMxn;
-            if (needQuote > 0 && !(lim && needMxn < (lim.minimumValue ?? 0))) {
-              const t = await client.ticker(sym);
-              const px = Number(t.last ?? 0);
-              if (px > 0) {
-                const o = await client.placeOrder({ book: sym, side: 'sell', type: 'market', major: String(needQuote) });
-                await prisma.trade.create({
-                  data: {
-                    userId, symbol: sym, side: 'SELL', amount: String(needQuote), price: String(px),
-                    status: 'PENDING', source: 'AI', reason: 'Realizar ganancia para retiro',
-                    externalId: o?.oid ? String(o.oid) : null,
-                  },
-                });
-                await logEvent(userId, `💱 Vendiendo ${quote.toUpperCase()} → MXN para retirar`, 'info');
-                await new Promise((r) => setTimeout(r, 4000));
+          // La bóveda ya está en MXN en Funding. Si falta, convierte el sobrante.
+          let mxnVault = 0;
+          try {
+            const funding = await (client as any).fundingBalance?.();
+            mxnVault = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+          } catch {}
+          if (mxnVault < 50 && quote !== 'mxn' && cashAvailable >= 2) {
+            try {
+              const needQuote = Math.min(profitReserve, cashAvailable);
+              if (needQuote >= 2) {
+                await (client as any).convert(quote.toUpperCase(), 'MXN', Number(needQuote.toFixed(2)));
+                await new Promise((r) => setTimeout(r, 2500));
+                const sp = await (client as any).spotBalance?.();
+                const mxnSpot = Number(sp?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+                if (mxnSpot >= 1) await (client as any).transfer('MAIN_FUNDING', 'MXN', Number(mxnSpot.toFixed(2)));
+                mxnVault += mxnSpot;
+                await logEvent(userId, `💱 Convertí ${quote.toUpperCase()} → MXN para retirar`, 'info');
               }
-            }
+            } catch {}
           }
-          const bals2 = await client.balance();
-          const mxnAvail = Number(bals2.find((b: any) => String(b.currency).toLowerCase() === 'mxn')?.available ?? 0);
-          const amount = Math.min(mxnAvail, vaultMxn);
+          const amount = Math.min(mxnVault, vaultMxn);
           if (amount >= 50) {
             const w = await (client as any).fiatWithdrawMxn({
               amountMxn: Math.round(amount * 100) / 100,

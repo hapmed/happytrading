@@ -67,7 +67,44 @@ export class BinanceClient {
     }
   }
 
-  // ── Saldos (Spot + Funding, para no "perder" fondos que se movieron de cartera) ──
+  // ── Saldos SOLO Spot (para operar) ────────────────────────────────
+  async spotBalance(): Promise<Array<{ currency: string; available: string; locked: string; total: string }>> {
+    const d = await this.request<{ balances: Array<{ asset: string; free: string; locked: string }> }>('GET', '/api/v3/account', {}, true);
+    return (d.balances ?? []).map((b) => ({
+      currency: String(b.asset).toLowerCase(),
+      available: String(Number(b.free ?? 0)),
+      locked: String(Number(b.locked ?? 0)),
+      total: String(Number(b.free ?? 0) + Number(b.locked ?? 0)),
+    }));
+  }
+
+  // ── Saldos SOLO Funding (la BÓVEDA) ───────────────────────────────
+  async fundingBalance(): Promise<Array<{ currency: string; available: string; total: string }>> {
+    const f = await this.request<any>('POST', '/sapi/v1/asset/get-funding-asset', {}, true).catch(() => []);
+    return (Array.isArray(f) ? f : []).map((x: any) => ({
+      currency: String(x.asset).toLowerCase(),
+      available: String(Number(x.free ?? 0)),
+      total: String(Number(x.free ?? 0) + Number(x.freeze ?? 0)),
+    }));
+  }
+
+  /** Transferencia universal entre carteras (MAIN_FUNDING / FUNDING_MAIN). */
+  async transfer(type: 'MAIN_FUNDING' | 'FUNDING_MAIN', asset: string, amount: number): Promise<void> {
+    await this.request('POST', '/sapi/v1/asset/transfer', { type, asset, amount: String(amount) }, true);
+  }
+
+  /** Convierte entre activos (Binance Convert) — permite montos chicos (desde ~2 USDT). */
+  async convert(fromAsset: string, toAsset: string, fromAmount: number): Promise<any> {
+    const q = await this.request<any>('POST', '/sapi/v1/convert/getQuote', {
+      fromAsset,
+      toAsset,
+      fromAmount: String(fromAmount),
+    }, true);
+    if (!q?.quoteId) throw new Error('Convert: sin cotización');
+    return this.request<any>('POST', '/sapi/v1/convert/acceptQuote', { quoteId: q.quoteId }, true);
+  }
+
+  // ── Saldos (Spot + Funding, para la valuación del portafolio) ──────
   async balance(): Promise<Array<{ currency: string; available: string; locked: string; total: string }>> {
     const [spot, funding] = await Promise.all([
       this.request<{ balances: Array<{ asset: string; free: string; locked: string }> }>('GET', '/api/v3/account', {}, true),
