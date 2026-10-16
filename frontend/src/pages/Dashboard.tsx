@@ -6,7 +6,6 @@ import { Panel, Stat, PixelButton } from '../components/Retro';
 import BotActivity from '../components/BotActivity';
 import Portfolio from '../components/Portfolio';
 import AutoStatus from '../components/AutoStatus';
-import RegimeGauge from '../components/RegimeGauge';
 import Positions from '../components/Positions';
 import RecentTrades from '../components/RecentTrades';
 import Instructions from '../components/Instructions';
@@ -53,7 +52,6 @@ export default function Dashboard() {
 
       <AutoStatus />
       <Portfolio />
-      <RegimeGauge />
       <Positions />
       <Instructions />
       <Usage />
