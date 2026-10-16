@@ -68,6 +68,7 @@ async function rotateToFund(
   needMxn: number,
   client: BitsoClient,
   limits: Map<string, any>,
+  availOf: (symbol: string) => number,
 ): Promise<string | null> {
   const lastT = rotateCooldown.get(userId) ?? 0;
   if (Date.now() - lastT < 180_000) return null; // máx. 1 rotación cada 3 min
@@ -86,7 +87,8 @@ async function rotateToFund(
     try {
       const t = await client.ticker(p.symbol);
       const price = Number(t.last ?? 0);
-      const qty = Number(p.baseAmount);
+      // Capar por el saldo REAL disponible de esa moneda (evita 0379 Insufficient balance).
+      const qty = Math.min(Number(p.baseAmount), availOf(p.symbol) * 0.999);
       const value = qty * price;
       if (value <= 0) continue;
       const lim = limits.get(p.symbol);
@@ -202,17 +204,45 @@ export async function runExecutorAll(): Promise<void> {
     }
   }
 
-  // Saldos MXN por usuario (para no comprar sin fondos)
+  // Saldos por usuario (real, incluso para no comprar ni vender de más)
   const mxnMap = new Map<string, number>();
+  const balMap = new Map<string, Map<string, { avail: number; total: number }>>();
   for (const u of users) {
     try {
       const bals = await clients.get(u.id)!.balance();
-      const mxn = bals.find((b: any) => String(b.currency).toLowerCase() === 'mxn');
-      mxnMap.set(u.id, Number(mxn?.available ?? 0));
+      const cmap = new Map<string, { avail: number; total: number }>();
+      for (const b of bals) {
+        const cur = String(b.currency ?? '').toLowerCase();
+        cmap.set(cur, { avail: Number(b.available ?? 0), total: Number(b.total ?? 0) });
+      }
+      balMap.set(u.id, cmap);
+      mxnMap.set(u.id, cmap.get('mxn')?.avail ?? 0);
     } catch {}
+  }
+  /** Cantidad disponible REAL de la moneda base de un par (evita vender de más). */
+  const availOf = (userId: string, symbol: string): number =>
+    balMap.get(userId)?.get(symbol.split('_')[0])?.avail ?? 0;
+
+  // AUTO-SANACIÓN: sincroniza TODAS las posiciones con el saldo REAL de Bitso.
+  // (Las comisiones/los precios de llenado desfasan la cantidad estimada; sin esto
+  //  el bot intentaría vender más de lo que tiene y Bitso daría 0379 Insufficient balance.)
+  for (const u of users) {
+    const cmap = balMap.get(u.id);
+    if (!cmap) continue;
+    const poss = await prisma.position.findMany({ where: { userId: u.id } });
+    for (const p of poss) {
+      const real = cmap.get(p.symbol.split('_')[0])?.total;
+      if (real == null) continue;
+      if (Math.abs(real - Number(p.baseAmount)) > 1e-9) {
+        await prisma.position
+          .update({ where: { id: p.id }, data: { baseAmount: String(real) } })
+          .catch(() => {});
+      }
+    }
   }
 
   // 1) Cumplir instrucciones
+  const soldKeys = new Set<string>();
   for (const ins of instructions) {
     const user = users.find((u) => u.id === ins.userId);
     if (!user) continue;
@@ -248,7 +278,7 @@ export async function runExecutorAll(): Promise<void> {
         // ¿Alcanza el MXN? Si no, vende una posición para fondear (rota) y reintenta el próximo ciclo.
         const mxn = mxnMap.get(ins.userId) ?? 0;
         if (minor > mxn) {
-          const sold = await rotateToFund(ins.userId, ins.symbol, minor, client, limits);
+          const sold = await rotateToFund(ins.userId, ins.symbol, minor, client, limits, (s) => availOf(ins.userId, s));
           if (sold) {
             await logEvent(user.id, `🔄 Sin MXN ($${mxn.toFixed(2)}) → vendo ${sold} para fondear ${ins.symbol}`, 'warn');
           } else {
@@ -274,11 +304,13 @@ export async function runExecutorAll(): Promise<void> {
         mxnMap.set(ins.userId, Math.max(0, mxn - minor));
         await queueNotification(user.id, 'TRADE', `BUY ${ins.symbol} (plan IA)`, `${ins.reason ?? ''} @ ${price}`);
       } else {
-        const qty = Number(ins.quantity ?? 0);
+        // Vender: capar por el saldo REAL disponible (la posición puede ir desfasada por comisiones).
+        const real = availOf(ins.userId, ins.symbol);
+        const qty = Math.min(Number(ins.quantity ?? 0), real * 0.999);
         const lim = limits.get(ins.symbol);
         const belowMin = lim && (qty < lim.minimumAmount || qty * price < lim.minimumValue);
         if (qty <= 0 || belowMin) {
-          await logEvent(user.id, `Plan cancelado ${ins.symbol}: cantidad bajo el mínimo`, 'warn');
+          await logEvent(user.id, `Plan cancelado ${ins.symbol}: cantidad bajo el mínimo o sin saldo`, 'info');
           await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'CANCELLED' } });
           continue;
         }
@@ -292,6 +324,7 @@ export async function runExecutorAll(): Promise<void> {
         });
         await applyPosition(user.id, ins.symbol, 'SELL', qty, price);
         await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'EXECUTED', executedAt: new Date(), tradeId: trade.id } });
+        soldKeys.add(`${user.id}:${ins.symbol}`);
         await queueNotification(user.id, 'TRADE', `SELL ${ins.symbol} (plan IA)`, `${ins.reason ?? ''} @ ${price}`);
       }
     } catch (err) {
@@ -337,11 +370,14 @@ export async function runExecutorAll(): Promise<void> {
     const hitTP = tpPrice > 0 ? price >= tpPrice : tpPct > 0 && changePct >= tpPct;
     if (!hitSL && !hitTP) continue;
 
+    if (soldKeys.has(`${user.id}:${pos.symbol}`)) continue; // ya se vendió en este ciclo
     const client = clients.get(user.id)!;
-    const qty = Number(pos.baseAmount);
+    // Capar por el saldo REAL (la posición puede ir desfasada por comisiones).
+    const realAvail = availOf(user.id, pos.symbol);
+    const qty = Math.min(Number(pos.baseAmount), realAvail * 0.999);
     const limP = limits.get(pos.symbol);
-    if (limP && (qty < limP.minimumAmount || qty * price < limP.minimumValue)) {
-      await logEvent(user.id, `SL/TP ${pos.symbol} no ejecutable: bajo el mínimo`, 'warn');
+    if (qty <= 0 || (limP && (qty < limP.minimumAmount || qty * price < limP.minimumValue))) {
+      await logEvent(user.id, `SL/TP ${pos.symbol} no ejecutable: bajo el mínimo o sin saldo`, 'info');
       continue;
     }
     try {
@@ -355,6 +391,7 @@ export async function runExecutorAll(): Promise<void> {
         },
       });
       await applyPosition(user.id, pos.symbol, 'SELL', qty, price);
+      soldKeys.add(`${user.id}:${pos.symbol}`);
       await prisma.signal.create({
         data: { userId: user.id, symbol: pos.symbol, action: 'SELL', confidence: 1, reasoning: reason, tokensUsed: 0, latencyMs: 0, executed: true },
       });

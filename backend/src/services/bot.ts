@@ -241,7 +241,16 @@ async function planForUser(userId: string): Promise<void> {
     if (amount <= 0) continue;
     const sym = `${cur}_mxn`;
     const existing = await prisma.position.findUnique({ where: { userId_symbol: { userId, symbol: sym } } });
-    if (existing) continue;
+    const realTotal = Number(b.total ?? 0);
+    if (existing) {
+      // Mantén la cantidad sincronizada con el saldo real (evita vender de más).
+      if (Math.abs(realTotal - Number(existing.baseAmount)) > 1e-9) {
+        await prisma.position
+          .update({ where: { userId_symbol: { userId, symbol: sym } }, data: { baseAmount: String(realTotal) } })
+          .catch(() => {});
+      }
+      continue;
+    }
     try {
       const t = await client.ticker(sym);
       const price = Number(t.last ?? 0);
