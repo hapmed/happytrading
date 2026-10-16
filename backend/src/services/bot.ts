@@ -500,11 +500,27 @@ async function planForUser(userId: string): Promise<void> {
     } catch {}
   }
   ranked.sort((a, b) => b.vol - a.vol);
-  const selected = (volatileTop > 0 ? ranked.slice(0, volatileTop) : ranked).map((r) => r.symbol);
+
+  // Selección: entre los más volátiles, PRIORIZA los que están BARATOS (estadística).
+  const pool = ranked.slice(0, Math.max(10, volatileTop * 3)).map((r) => r.symbol);
+  const cheap: string[] = [];
+  for (const sym of pool) {
+    try {
+      const ind = await getIndicators(sym.split('_')[0]);
+      if (ind && (ind.stat === 'BARATO' || Number(ind.bbPos) <= 25)) cheap.push(sym);
+    } catch {}
+  }
+  const ordered = [...cheap, ...ranked.map((r) => r.symbol)];
+  const selected = (volatileTop > 0 ? uniq(ordered).slice(0, volatileTop + 1) : ordered);
   if (selected.length) {
     await logEvent(
       userId,
-      `⚡ Top volátiles: ${selected.map((s) => `${s.split('_')[0].toUpperCase()} ${(ranked.find((r) => r.symbol === s)?.vol ?? 0).toFixed(1)}%`).join(' · ')}`,
+      `⚡ Selección: ${selected
+        .map((s) => {
+          const v = (ranked.find((r) => r.symbol === s)?.vol ?? 0).toFixed(1);
+          return `${s.split('_')[0].toUpperCase()} ${v}%${cheap.includes(s) ? '❄' : ''}`;
+        })
+        .join(' · ')}`,
       'info',
     );
   }
@@ -586,13 +602,16 @@ async function planForUser(userId: string): Promise<void> {
       const ask0 = Number(ticker.ask ?? 0);
       const mid0 = bid0 > 0 && ask0 > 0 ? (bid0 + ask0) / 2 : last;
       const spread0 = mid0 > 0 && ask0 > bid0 ? ((ask0 - bid0) / mid0) * 100 : 0;
-      if (indicators && indicators.stat === 'BARATO' && signal.action === 'HOLD' && spread0 <= 0.6 && last > 0) {
+      const cheapEnough =
+        indicators &&
+        (indicators.stat === 'BARATO' || Number(indicators.bbPos) <= 30 || Number(indicators.zScore) <= -0.6);
+      if (cheapEnough && signal.action === 'HOLD' && spread0 <= 1.2 && last > 0) {
         signal.action = 'BUY';
         signal.confidence = Math.max(signal.confidence, 0.6);
         signal.reasoning = `BARATO z=${indicators.zScore} RSI=${indicators.rsi} (estadística)`;
         await logEvent(
           userId,
-          `📈 Override estadístico ${symbol} → BUY (barato: z=${indicators.zScore}, RSI=${indicators.rsi}, spread ${spread0.toFixed(2)}%)`,
+          `📈 Compro ${symbol} por BARATO (z=${indicators.zScore}, RSI=${indicators.rsi}, pos_bandas=${indicators.bbPos}%, spread ${spread0.toFixed(2)}%)`,
           'ok',
         );
       }
