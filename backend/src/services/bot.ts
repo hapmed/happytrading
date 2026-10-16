@@ -409,26 +409,24 @@ async function planForUser(userId: string): Promise<void> {
 
   const cashReserveAmount = equityQuote * (cashReservePct / 100);
 
-  // ── BÓVEDA: convierte la ganancia a MXN y la guarda en Funding (estable, fuera del trading) ──
+  // ── BÓVEDA: guarda SOLO la ganancia REALIZADA (efectivo por encima del capital) ──
+  // Se convierte a MXN y se guarda en Funding. Una vez ahí, NO se toca (solo se retira a los $50).
   try {
     const funding = await (client as any).fundingBalance?.();
     const fundingMxn = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-    const pendingMxn = vaultMxn - fundingMxn; // lo que falta por pasar a MXN
-    if (pendingMxn >= 10 && quote !== 'mxn' && cashAvailable >= 0.5) {
-      const fromAmount = Math.min(Number((pendingMxn / quoteToMxn).toFixed(2)), Number(cashAvailable.toFixed(2)));
-      if (fromAmount >= 0.5) {
+    const pendingMxn = Math.max(0, vaultMxn - fundingMxn); // lo que falta por guardar
+    // Efectivo por ENCIMA del capital = ganancia ya realizada (nunca tocamos el capital).
+    const realizedCashMxn = Math.max(0, (cashAvailable - investedQuote) * quoteToMxn);
+    const moveMxn = Math.min(pendingMxn, realizedCashMxn);
+    if (moveMxn >= 9 && quote !== 'mxn') {
+      const fromAmount = Number((moveMxn / quoteToMxn).toFixed(2));
+      if (fromAmount >= 0.5 && fromAmount <= cashAvailable) {
         await (client as any).convert(quote.toUpperCase(), 'MXN', fromAmount);
         await new Promise((r) => setTimeout(r, 2500));
         const sp = await (client as any).spotBalance?.();
         const mxnSpot = Number(sp?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-        if (mxnSpot >= 1) {
-          await (client as any).transfer('MAIN_FUNDING', 'MXN', Number(mxnSpot.toFixed(2)));
-        }
-        await logEvent(
-          userId,
-          `🏦 Bóveda: convertí la ganancia a MXN y la guardé (fuera del trading, sin variar)`,
-          'ok',
-        );
+        if (mxnSpot >= 1) await (client as any).transfer('MAIN_FUNDING', 'MXN', Number(mxnSpot.toFixed(2)));
+        await logEvent(userId, `🏦 Bóveda: guardé $${moveMxn.toFixed(2)} MXN de ganancia (ya no se mueve de ahí)`, 'ok');
       }
     }
   } catch (err) {
@@ -437,52 +435,32 @@ async function planForUser(userId: string): Promise<void> {
 
   // ── Retiro automático de ganancias a la CLABE (Binance → SPEI) ─────
   const PAYOUT_MIN_MXN = 50; // mínimo de retiro SPEI en Binance (verificado en su API)
-  if (user.payoutEnabled && user.payoutClabe && user.payoutBeneficiary && vaultMxn > 0) {
-    if (vaultMxn >= PAYOUT_MIN_MXN) {
-      try {
-        const payoutKey = `payout:${userId}:${new Date().toISOString().slice(0, 13)}`; // máx 1/hora
-        if (!(await kv.get(payoutKey))) {
-          // La bóveda ya está en MXN en Funding. Si falta, convierte el sobrante.
-          let mxnVault = 0;
-          try {
-            const funding = await (client as any).fundingBalance?.();
-            mxnVault = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-          } catch {}
-          if (mxnVault < 50 && quote !== 'mxn' && cashAvailable >= 0.5) {
-            try {
-              const needQuote = Math.min(profitReserve, cashAvailable);
-              if (needQuote >= 0.5) {
-                await (client as any).convert(quote.toUpperCase(), 'MXN', Number(needQuote.toFixed(2)));
-                await new Promise((r) => setTimeout(r, 2500));
-                const sp = await (client as any).spotBalance?.();
-                const mxnSpot = Number(sp?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-                if (mxnSpot >= 1) await (client as any).transfer('MAIN_FUNDING', 'MXN', Number(mxnSpot.toFixed(2)));
-                mxnVault += mxnSpot;
-                await logEvent(userId, `💱 Convertí ${quote.toUpperCase()} → MXN para retirar`, 'info');
-              }
-            } catch {}
-          }
-          const amount = Math.min(mxnVault, vaultMxn);
-          if (amount >= 50) {
-            const w = await (client as any).fiatWithdrawMxn({
-              amountMxn: Math.round(amount * 100) / 100,
-              clabe: user.payoutClabe,
-              beneficiary: user.payoutBeneficiary,
-              bank: user.payoutBank ?? undefined,
-            });
-            await prisma.deposit.create({
-              data: {
-                userId, currency: 'mxn', amount: String(Math.round(amount * 100) / 100), kind: 'WITHDRAWAL',
-                note: `binance-spei:${w?.orderId ?? w?.id ?? 'retiro'}`,
-              },
-            });
-            await kv.set(payoutKey, '1', 3600);
-            await logEvent(userId, `🏦 Retiro automático a tu CLABE: $${amount.toFixed(2)} MXN`, 'ok');
-          }
+  if (user.payoutEnabled && user.payoutClabe && user.payoutBeneficiary) {
+    try {
+      const payoutKey = `payout:${userId}:${new Date().toISOString().slice(0, 13)}`; // máx 1/hora
+      if (!(await kv.get(payoutKey))) {
+        const funding = await (client as any).fundingBalance?.();
+        const mxnVault = Number(funding?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+        if (mxnVault >= PAYOUT_MIN_MXN) {
+          const amount = Math.round(mxnVault * 100) / 100;
+          // Traer la bóveda (MXN) de Funding → Spot para el retiro SPEI.
+          await (client as any).transfer('FUNDING_MAIN', 'MXN', amount);
+          await new Promise((r) => setTimeout(r, 3000));
+          const w = await (client as any).fiatWithdrawMxn({
+            amountMxn: amount,
+            clabe: user.payoutClabe,
+            beneficiary: user.payoutBeneficiary,
+            bank: user.payoutBank ?? undefined,
+          });
+          await prisma.deposit.create({
+            data: { userId, currency: 'mxn', amount: String(amount), kind: 'WITHDRAWAL', note: `binance-spei:${w?.orderId ?? w?.id ?? 'retiro'}` },
+          });
+          await kv.set(payoutKey, '1', 3600);
+          await logEvent(userId, `🏦 Retiro automático a tu CLABE: $${amount.toFixed(2)} MXN`, 'ok');
         }
-      } catch (err) {
-        await logEvent(userId, `No se pudo retirar a la CLABE: ${(err as Error).message.slice(0, 70)}`, 'warn');
       }
+    } catch (err) {
+      await logEvent(userId, `No se pudo retirar a la CLABE: ${(err as Error).message.slice(0, 70)}`, 'warn');
     }
   }
 
