@@ -112,6 +112,49 @@ async function resolveSymbols(
 }
 
 /**
+ * Registra depósitos/retiros REALES de Bitso (endpoints oficiales), deduplicados por id.
+ * El monto se guarda SIEMPRE en MXN (las criptos se valúan al momento de detectarlas)
+ * para que el PnL sea confiable: PnL = valor_actual − (capital_inicial + neto_depósitos).
+ */
+async function syncBitsoMovements(userId: string, client: BitsoClient): Promise<void> {
+  const record = async (kind: 'DEPOSIT' | 'WITHDRAWAL', raw: any[]) => {
+    for (const m of raw) {
+      try {
+        const id = String(m?.id ?? '');
+        if (!id) continue;
+        const status = String(m?.status ?? '').toLowerCase();
+        if (status && !/complete|confirm|done|settled/.test(status)) continue; // solo confirmados
+        const note = `bitso:${id}`;
+        if (await prisma.deposit.findFirst({ where: { userId, note } })) continue;
+        const currency = String(m?.currency ?? 'mxn').toLowerCase();
+        const rawAmount = Number(m?.amount ?? 0);
+        if (!(rawAmount > 0)) continue;
+        let mxn = rawAmount;
+        if (currency !== 'mxn') {
+          const t = await client.ticker(`${currency}_mxn`);
+          const p = Number(t.last ?? 0);
+          if (!(p > 0)) continue;
+          mxn = rawAmount * p;
+        }
+        await prisma.deposit.create({ data: { userId, currency, amount: String(mxn), kind, note } });
+        await logEvent(
+          userId,
+          `${kind === 'DEPOSIT' ? '⬇ Depósito' : '⬆ Retiro'} registrado: ${rawAmount} ${currency.toUpperCase()} (~$${mxn.toFixed(2)} MXN) — no cuenta como ganancia`,
+          kind === 'DEPOSIT' ? 'ok' : 'warn',
+        );
+      } catch {}
+    }
+  };
+  try {
+    const [deps, wds] = await Promise.all([client.deposits(40), client.withdrawals(40)]);
+    await record('DEPOSIT', deps);
+    await record('WITHDRAWAL', wds);
+  } catch (err) {
+    await logEvent(userId, `No se pudieron leer movimientos de Bitso: ${(err as Error).message.slice(0, 50)}`, 'warn');
+  }
+}
+
+/**
  * PLANIFICADOR (usa IA): analiza y deja INSTRUCCIONES con niveles y tiempo.
  * No coloca órdenes — de eso se encarga el ejecutor "tonto".
  */
@@ -155,11 +198,6 @@ async function planForUser(userId: string): Promise<void> {
   }
   await logEvent(userId, `Saldo leído · ${balances.length} monedas`, 'info');
 
-  const prevMxnSnap = await prisma.balanceSnapshot.findFirst({
-    where: { userId, currency: 'mxn' },
-    orderBy: { capturedAt: 'desc' },
-  });
-
   for (const b of balances) {
     await prisma.balanceSnapshot.create({
       data: {
@@ -187,32 +225,9 @@ async function planForUser(userId: string): Promise<void> {
   const mxn = balances.find((b) => String(b.currency).toLowerCase() === 'mxn');
   const mxnAvailable = Number(mxn?.available ?? '0');
 
-  // Detección de depósitos/retiros por transferencia (por diferencia de saldo MXN,
-  // descontando las operaciones del propio bot) → NO se cuentan como ganancia.
-  if (prevMxnSnap) {
-    try {
-      const tradesSince = await prisma.trade.findMany({
-        where: { userId, createdAt: { gt: prevMxnSnap.capturedAt } },
-      });
-      const netTradeMxn = tradesSince.reduce(
-        (s, t) => s + (t.side === 'SELL' ? Number(t.amount) * Number(t.price) : -Number(t.amount)),
-        0,
-      );
-      const delta = mxnAvailable - Number(prevMxnSnap.available);
-      const net = delta - netTradeMxn;
-      if (net > 5) {
-        await prisma.deposit.create({
-          data: { userId, currency: 'mxn', amount: String(Math.round(net * 100) / 100), kind: 'DEPOSIT', note: 'transferencia detectada' },
-        });
-        await logEvent(userId, `💰 Depósito detectado: $${net.toFixed(2)} MXN (no cuenta como ganancia)`, 'ok');
-      } else if (net < -5) {
-        await prisma.deposit.create({
-          data: { userId, currency: 'mxn', amount: String(Math.round(-net * 100) / 100), kind: 'WITHDRAWAL', note: 'retiro detectado' },
-        });
-        await logEvent(userId, `📤 Retiro detectado: $${(-net).toFixed(2)} MXN`, 'warn');
-      }
-    } catch {}
-  }
+  // Movimientos REALES de Bitso (depósitos/retiros oficiales) → NO cuentan como ganancia.
+  // (Antes se inferían por diferencia de saldo y el trading generaba falsos retiros.)
+  await syncBitsoMovements(userId, client);
 
   const maxOrder = user.maxOrderAmount ? Number(user.maxOrderAmount) : DEFAULT_ORDER_MXN;
   const riskPct = user.riskPct ? Number(user.riskPct) : 1;

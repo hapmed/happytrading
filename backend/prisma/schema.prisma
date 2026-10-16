@@ -46,6 +46,9 @@ model User {
   initialCapital Decimal?   @db.Decimal(18, 2)
   riskPct        Decimal?   @db.Decimal(6, 3)
   cashReservePct Decimal?   @db.Decimal(6, 3)
+  // Bóveda de ganancias: separa el excedente del capital inicial y no lo reinvierte
+  vaultEnabled   Boolean    @default(false)
+  vaultAsset     String?    @default("usdc")
   symbols        String?
   dcaLevels      Int?
   dcaStepPct     Decimal?   @db.Decimal(6, 3)

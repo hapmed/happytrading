@@ -267,6 +267,34 @@ export async function userRoutes(app: FastifyInstance) {
     });
   });
 
+  // Movimientos (depósitos/retiros): los registrados + los reales de Bitso (para verificar el PnL).
+  app.get('/movements', { preHandler: [authenticate] }, async (req) => {
+    const recorded = await prisma.deposit.findMany({
+      where: { userId: req.user.sub },
+      orderBy: { detectedAt: 'desc' },
+      take: 50,
+    });
+    const netMxn = recorded.reduce(
+      (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
+      0,
+    );
+    let live: any = { deposits: [], withdrawals: [], error: null };
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (user?.bitsoApiKey && user?.bitsoApiSecret) {
+      try {
+        const client = new BitsoClient({
+          apiKey: decrypt(user.bitsoApiKey),
+          apiSecret: decrypt(user.bitsoApiSecret),
+        });
+        const [d, w] = await Promise.all([client.deposits(25), client.withdrawals(25)]);
+        live = { deposits: d, withdrawals: w, error: null };
+      } catch (err: any) {
+        live.error = err.message;
+      }
+    }
+    return { recorded, netMxn, live };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
