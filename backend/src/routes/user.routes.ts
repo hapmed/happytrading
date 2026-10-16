@@ -12,6 +12,7 @@ import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
 import { getUsage, getLimits, getOpenRouterQuota } from '../lib/usage.js';
 import { getIndicators } from '../lib/indicators.js';
+import { makeExchangeClient, hasExchangeCreds } from '../lib/exchange.js';
 
 // Monedas del termómetro de mercado (pares contra MXN).
 const THERMO_COINS = [
@@ -47,6 +48,7 @@ const tradingSchema = z.object({
   // Bóveda de ganancias en moneda estable
   vaultEnabled: z.boolean().optional(),
   vaultAsset: z.enum(['usdt', 'usdc', 'dai']).optional(),
+  exchange: z.enum(['bitso', 'binance']).optional(),
 });
 
 export async function userRoutes(app: FastifyInstance) {
@@ -117,17 +119,15 @@ export async function userRoutes(app: FastifyInstance) {
     });
   });
 
-  // Saldo en vivo desde Bitso
+  // Saldo en vivo del exchange configurado
   app.get('/balance', { preHandler: [authenticate] }, async (req, reply) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) {
-      return reply.code(400).send({ error: 'Bitso no conectado' });
+    if (!user || !hasExchangeCreds(user)) {
+      return reply.code(400).send({ error: 'Exchange no configurado' });
     }
     try {
-      const client = new BitsoClient({
-        apiKey: decrypt(user.bitsoApiKey),
-        apiSecret: decrypt(user.bitsoApiSecret),
-      });
+      const client = await makeExchangeClient(user);
+      if (!client) return reply.code(400).send({ error: 'Exchange no configurado' });
       const balances = await client.balance();
       return { balances };
     } catch (err: any) {
@@ -341,16 +341,17 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
-  // "Vaciar a la bóveda": vende TODAS las posiciones y compra USDT con todo el MXN.
-  // (Deja el capital líquido en la moneda estable, listo para retirar o mover.)
+  // "Vaciar": vende TODAS las posiciones. Con convert:'mxn' deja el dinero en pesos
+  // (para transferir a Binance); con convert:'vault' lo pasa a la moneda estable.
   app.post('/vault/empty', { preHandler: [authenticate] }, async (req, reply) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user?.bitsoApiKey || !user.bitsoApiSecret) return reply.code(400).send({ error: 'Bitso no conectado' });
-    const client = new BitsoClient({
-      apiKey: decrypt(user.bitsoApiKey),
-      apiSecret: decrypt(user.bitsoApiSecret),
-    });
-    const limits = await getBookLimits(client).catch(() => new Map<string, any>());
+    if (!user || !hasExchangeCreds(user)) return reply.code(400).send({ error: 'Exchange no configurado' });
+    const client = await makeExchangeClient(user);
+    if (!client) return reply.code(400).send({ error: 'Exchange no configurado' });
+    const exch = (user.exchange ?? 'bitso').toLowerCase() === 'binance' ? 'binance' : 'bitso';
+    const limits = await getBookLimits(client, exch).catch(() => new Map<string, any>());
+    const body = (req.body ?? {}) as { convert?: string };
+    const toMxn = (body.convert ?? 'vault').toLowerCase() === 'mxn';
     const vaultAsset = (user.vaultAsset || 'usdt').toLowerCase();
     const results: any[] = [];
 
@@ -387,14 +388,14 @@ export async function userRoutes(app: FastifyInstance) {
       }
     }
 
-    // 2) Comprar la moneda de la bóveda con TODO el MXN disponible.
+    // 2) (Opcional) Comprar la moneda de la bóveda con el MXN disponible.
     await new Promise((r) => setTimeout(r, 3000));
     const bals2 = await client.balance();
     const mxn = Number(bals2.find((b: any) => String(b.currency).toLowerCase() === 'mxn')?.available ?? 0);
     const vsym = `${vaultAsset}_mxn`;
     const limV = limits.get(vsym);
     let boughtMxn = 0;
-    if (mxn >= Math.max(1, limV?.minimumValue ?? 1)) {
+    if (!toMxn && mxn >= Math.max(1, limV?.minimumValue ?? 1)) {
       try {
         const t = await client.ticker(vsym);
         const price = Number(t.last ?? 0);
@@ -427,7 +428,9 @@ export async function userRoutes(app: FastifyInstance) {
     }
     await logEvent(
       user.id,
-      `🧺 Vaciar a la bóveda: ${results.length} movimiento(s), ${vaultAsset.toUpperCase()} por ~$${boughtMxn.toFixed(2)} MXN`,
+      toMxn
+        ? `🧺 Vaciar a MXN: ${results.length} venta(s) · quedan $${mxn.toFixed(2)} MXN`
+        : `🧺 Vaciar a la bóveda: ${results.length} movimiento(s), ${vaultAsset.toUpperCase()} por ~$${boughtMxn.toFixed(2)} MXN`,
       'ok',
     ).catch(() => {});
     return { results, vaultBoughtMxn: boughtMxn, vaultAsset };

@@ -1,10 +1,5 @@
-// Límites por libro de Bitso (min/max) según /v3/available_books/
-// Cacheado en Redis para no consultarlo en cada operación.
+// Límites por libro (min/max) según el exchange (Bitso o Binance). Cacheado.
 import { kv } from './kv.js';
-import { BitsoClient } from '../services/bitso.js';
-
-const KEY = 'bitso:booklimits';
-const TTL = 900; // 15 min
 
 export interface BookLimits {
   book: string;
@@ -15,7 +10,13 @@ export interface BookLimits {
   tickSize: number;
 }
 
-export async function getBookLimits(client: BitsoClient): Promise<Map<string, BookLimits>> {
+/** Acepta la respuesta de Bitso (snake_case) o de Binance (camelCase). */
+export async function getBookLimits(
+  client: { availableBooks: () => Promise<any[]> },
+  exchange = 'bitso',
+): Promise<Map<string, BookLimits>> {
+  const KEY = `booklimits:${exchange}`;
+  const TTL = 900; // 15 min
   try {
     const cached = await kv.get(KEY);
     if (cached) {
@@ -27,11 +28,11 @@ export async function getBookLimits(client: BitsoClient): Promise<Map<string, Bo
   const books = await client.availableBooks();
   const list: BookLimits[] = (books ?? []).map((b: any) => ({
     book: String(b.book ?? ''),
-    minimumAmount: Number(b.minimum_amount ?? 0),
-    minimumValue: Number(b.minimum_value ?? 0),
-    maximumAmount: Number(b.maximum_amount ?? 0),
-    maximumValue: Number(b.maximum_value ?? 0),
-    tickSize: Number(b.tick_size ?? 0),
+    minimumAmount: Number(b.minimumAmount ?? b.minimum_amount ?? 0),
+    minimumValue: Number(b.minimumValue ?? b.minimum_value ?? 0),
+    maximumAmount: Number(b.maximumAmount ?? b.maximum_amount ?? 0),
+    maximumValue: Number(b.maximumValue ?? b.maximum_value ?? 0),
+    tickSize: Number(b.tickSize ?? b.tick_size ?? 0),
   }));
 
   try {

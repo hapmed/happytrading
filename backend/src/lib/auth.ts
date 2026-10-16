@@ -36,6 +36,7 @@ export function serializeUser(user: any) {
     workingCapitalMxn: user.workingCapitalMxn?.toString() ?? null,
     vaultEnabled: user.vaultEnabled ?? false,
     vaultAsset: user.vaultAsset ?? 'usdt',
+    exchange: user.exchange ?? 'bitso',
     createdAt: user.createdAt,
   };
 }

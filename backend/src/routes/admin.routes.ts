@@ -18,6 +18,7 @@ const smtpSchema = z.object({
 
 const settingsSchema = z.object({
   smtp: smtpSchema.nullable().optional(),
+  binance: z.object({ apiKey: z.string().optional(), secret: z.string().optional() }).nullable().optional(),
   alpaca: z
     .object({ keyId: z.string().optional(), secret: z.string().optional(), baseUrl: z.string().optional() })
     .nullable()
@@ -107,7 +108,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ----- Configuración global -----
   app.get('/settings', { preHandler: [requireAdmin] }, async () => {
-    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'limits', 'providers', 'alpaca'];
+    const keys = ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'limits', 'providers', 'binance'];
     const rows = await prisma.setting.findMany({ where: { key: { in: keys } } });
     const out: Record<string, unknown> = {};
     for (const r of rows) out[r.key] = r.value;
@@ -120,7 +121,7 @@ export async function adminRoutes(app: FastifyInstance) {
       out.providers = (out.providers as any[]).map((p) => ({ ...p, apiKey: p.apiKey ? MASK : '' }));
     }
     if (out.turnstile) out.turnstile = mask(out.turnstile, 'secretKey');
-    if (out.alpaca) out.alpaca = mask(out.alpaca, 'secret');
+    if (out.binance) out.binance = mask(out.binance, 'secret');
     return out;
   });
 
@@ -154,6 +155,19 @@ export async function adminRoutes(app: FastifyInstance) {
         smtp = preserveMasked(map.get('smtp'), smtp, 'pass');
       }
       await upsert('smtp', smtp);
+    }
+    if (body.binance !== undefined) {
+      let bn: any = body.binance;
+      if (bn) {
+        const prev = (map.get('binance') as any) ?? {};
+        bn = {
+          apiKey: bn.apiKey ?? prev.apiKey ?? '',
+          // El secret se guarda CIFRADO; si llega enmascarado, se conserva el anterior.
+          secret: bn.secret && bn.secret !== MASK ? encrypt(bn.secret) : (prev.secret ?? ''),
+        };
+        if (!bn.apiKey || !bn.secret) bn = {};
+      }
+      await upsert('binance', bn);
     }
     if (body.alpaca !== undefined) {
       let al: any = body.alpaca;

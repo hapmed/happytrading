@@ -1,8 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { kv } from '../lib/kv.js';
-import { decrypt } from '../lib/crypto.js';
-import { BitsoClient } from './bitso.js';
 import { generateSignal } from './ai.js';
+import { makeExchangeClient, exchangeOf, hasExchangeCreds, type ExchangeClient } from '../lib/exchange.js';
 import { setState, logEvent } from '../lib/activity.js';
 import { valuePortfolio } from '../lib/portfolio.js';
 import { getRegime } from './regime.js';
@@ -32,7 +31,7 @@ async function clearPending(userId: string, symbol: string): Promise<void> {
  * ROTACIÓN: vende una posición en hold para fondear una oportunidad de compra.
  * Prioriza vender la de mayor ganancia (o la más pequeña) que no sea la del par objetivo.
  */
-async function tryRotate(userId: string, excludeSymbol: string, client: BitsoClient): Promise<number> {
+async function tryRotate(userId: string, excludeSymbol: string, client: ExchangeClient): Promise<number> {
   const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 } } });
   const others = positions.filter((p) => p.symbol !== excludeSymbol);
   if (!others.length) return 0;
@@ -77,7 +76,7 @@ async function tryRotate(userId: string, excludeSymbol: string, client: BitsoCli
 async function resolveSymbols(
   custom: string | null,
   profile: string,
-  client: BitsoClient,
+  client: ExchangeClient,
   heldCurrencies: string[],
 ): Promise<string[]> {
   const c = (custom ?? '').trim().toLowerCase();
@@ -115,7 +114,7 @@ async function resolveSymbols(
  * Detecta RETIROS reales desde la API de Bitso (el endpoint de depósitos da 404).
  * Devuelve cuánto se retiró (nuevo) para poder reiniciar la bóveda automáticamente.
  */
-async function syncBitsoMovements(userId: string, client: BitsoClient): Promise<{ withdrawn: number }> {
+async function syncBitsoMovements(userId: string, client: ExchangeClient): Promise<{ withdrawn: number }> {
   let withdrawn = 0;
   try {
     const wds = await client.withdrawals();
@@ -175,14 +174,16 @@ export async function runBotForUser(userId: string): Promise<void> {
 
 async function planForUser(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || !user.bitsoApiKey || !user.bitsoApiSecret || !user.tradingEnabled) return;
+  if (!user || !user.tradingEnabled || !hasExchangeCreds(user)) return;
 
-  const client = new BitsoClient({
-    apiKey: decrypt(user.bitsoApiKey),
-    apiSecret: decrypt(user.bitsoApiSecret),
-  });
+  const client = await makeExchangeClient(user);
+  if (!client) {
+    await logEvent(userId, 'Faltan credenciales del exchange configurado', 'warn');
+    return;
+  }
+  const exch = exchangeOf(user);
 
-  const limits = await getBookLimits(client).catch(() => new Map<string, BookLimits>());
+  const limits = await getBookLimits(client, exch).catch(() => new Map<string, BookLimits>());
 
   await setState(userId, 'reading_balance', 'Leyendo saldo de Bitso');
   await logEvent(userId, 'IA planificando · leyendo saldo', 'info');

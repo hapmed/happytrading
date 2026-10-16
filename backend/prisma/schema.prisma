@@ -31,6 +31,8 @@ model User {
   // Integración Bitso (claves cifradas AES-256-GCM)
   bitsoApiKey    String?
   bitsoApiSecret String?
+  // Exchange activo para operar: "bitso" | "binance"
+  exchange       String     @default("bitso")
 
   // Preferencias de trading
   tradingEnabled Boolean    @default(true)

@@ -1,7 +1,6 @@
 import { prisma } from './prisma.js';
 import { kv } from './kv.js';
-import { decrypt } from './crypto.js';
-import { BitsoClient } from '../services/bitso.js';
+import { makeExchangeClient, hasExchangeCreds, type ExchangeClient } from './exchange.js';
 
 export interface Holding {
   currency: string;
@@ -19,7 +18,7 @@ export interface PortfolioValuation {
  * Valora el portafolio en MXN usando los precios actuales de Bitso.
  * Solo valúa monedas con saldo > 0 y con par disponible en MXN.
  */
-export async function valuePortfolio(client: BitsoClient, balances: any[]): Promise<PortfolioValuation> {
+export async function valuePortfolio(client: ExchangeClient, balances: any[]): Promise<PortfolioValuation> {
   const holdings: Holding[] = [];
   const priceCache = new Map<string, number>();
   let totalMxn = 0;
@@ -71,12 +70,10 @@ export async function getLiveValuation(userId: string): Promise<LiveValuation | 
   if (cached) return JSON.parse(cached);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user?.bitsoApiKey || !user?.bitsoApiSecret) return null;
+  if (!user || !hasExchangeCreds(user)) return null;
 
-  const client = new BitsoClient({
-    apiKey: decrypt(user.bitsoApiKey),
-    apiSecret: decrypt(user.bitsoApiSecret),
-  });
+  const client = await makeExchangeClient(user);
+  if (!client) return null;
 
   const balances = await client.balance();
   const val = await valuePortfolio(client, balances);

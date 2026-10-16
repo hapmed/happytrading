@@ -1,10 +1,9 @@
 import { prisma } from '../lib/prisma.js';
-import { decrypt } from '../lib/crypto.js';
 import { kv } from '../lib/kv.js';
-import { BitsoClient } from './bitso.js';
 import { queueNotification } from '../lib/notify.js';
 import { logEvent } from '../lib/activity.js';
 import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
+import { makeExchangeClient, exchangeOf, type ExchangeClient } from '../lib/exchange.js';
 
 function roundStr(n: number, dp: number): string {
   if (!isFinite(n) || n <= 0) return '0';
@@ -66,7 +65,7 @@ async function rotateToFund(
   userId: string,
   excludeSymbol: string,
   needMxn: number,
-  client: BitsoClient,
+  client: ExchangeClient,
   limits: Map<string, any>,
   availOf: (symbol: string) => number,
 ): Promise<string | null> {
@@ -149,9 +148,25 @@ async function rotateToFund(
  * Corre seguido (p. ej. cada 20-30s) y es barato.
  */
 export async function runExecutorAll(): Promise<void> {
-  const users = await prisma.user.findMany({
-    where: { bitsoApiKey: { not: null }, bitsoApiSecret: { not: null }, tradingEnabled: true },
+  const users0 = await prisma.user.findMany({
+    where: {
+      tradingEnabled: true,
+      OR: [
+        { bitsoApiKey: { not: null }, bitsoApiSecret: { not: null } },
+        { exchange: 'binance' },
+      ],
+    },
   });
+  // Construye el cliente del exchange de cada usuario (Bitso o Binance).
+  const clients = new Map<string, ExchangeClient>();
+  const users: typeof users0 = [];
+  for (const u of users0) {
+    const c = await makeExchangeClient(u).catch(() => null);
+    if (c) {
+      clients.set(u.id, c);
+      users.push(u);
+    }
+  }
   if (!users.length) return;
 
   // Recuperación tras reinicio: instrucciones que quedaron en PROCESSING vuelven a PENDING.
@@ -176,21 +191,27 @@ export async function runExecutorAll(): Promise<void> {
   for (const i of instructions) symbols.add(i.symbol);
   for (const p of positions) symbols.add(p.symbol);
 
-  const clients = new Map<string, BitsoClient>();
-  for (const u of users) {
-    clients.set(u.id, new BitsoClient({ apiKey: decrypt(u.bitsoApiKey!), apiSecret: decrypt(u.bitsoApiSecret!) }));
-  }
   const clientList = [...clients.values()];
 
-  // Límites de libro: se prueban los clientes hasta que uno responda
-  // (una key inválida no debe bloquear a TODOS los usuarios).
-  let limits = new Map<string, BookLimits>();
-  for (const c of clientList) {
-    try {
-      limits = await getBookLimits(c);
-      break;
-    } catch {}
-  }
+  // Límites de libro: por exchange, con cache. (una key inválida no debe bloquear a todos)
+  const limitsCache = new Map<string, Map<string, BookLimits>>();
+  const getLimits = async (userId: string): Promise<Map<string, BookLimits>> => {
+    const u = users.find((x) => x.id === userId);
+    const exch = u ? exchangeOf(u) : 'bitso';
+    let m = limitsCache.get(exch);
+    if (!m) {
+      for (const c of clientList) {
+        try {
+          m = await getBookLimits(c, exch);
+          break;
+        } catch {}
+      }
+      m = m ?? new Map();
+      limitsCache.set(exch, m);
+    }
+    return m;
+  };
+  let limits: Map<string, BookLimits> = await getLimits(users[0].id);
 
   // Precios (una vez por símbolo) — SIN IA, con fallback entre clientes
   const priceMap = new Map<string, number>();
