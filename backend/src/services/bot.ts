@@ -416,9 +416,9 @@ async function planForUser(userId: string): Promise<void> {
     const fundingQuote = Number(funding?.find((b: any) => b.currency === quote)?.available ?? 0);
     const realizedCash = Math.max(0, cashAvailable - investedQuote); // efectivo SOBRE tu capital
     const pending = Math.max(0, realizedCash - fundingQuote);
-    if (pending >= 0.05) {
+    if (pending >= 0.005) {
       const move = Math.min(pending, cashAvailable);
-      await (client as any).transfer('MAIN_FUNDING', quote.toUpperCase(), Number(move.toFixed(4)));
+      await (client as any).transfer('MAIN_FUNDING', quote.toUpperCase(), Number(move.toFixed(6)));
       await logEvent(
         userId,
         `🏦 Bóveda: guardé ${move.toFixed(4)} ${quote.toUpperCase()} (~$${(move * quoteToMxn).toFixed(2)} MXN) — ya no se mueve`,
