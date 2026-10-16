@@ -360,7 +360,7 @@ async function planForUser(userId: string): Promise<void> {
   const cashReserveAmount = equityMxn * (cashReservePct / 100);
 
   // ── Retiro automático de ganancias a la CLABE (Binance → SPEI) ─────
-  const PAYOUT_MIN_MXN = 100;
+  const PAYOUT_MIN_MXN = 50; // mínimo de retiro SPEI en Binance (verificado en su API)
   if (user.payoutEnabled && user.payoutClabe && user.payoutBeneficiary && profitReserve > 0) {
     const profitMxn = profitReserve * quoteToMxn;
     if (profitMxn >= PAYOUT_MIN_MXN) {
