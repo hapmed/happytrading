@@ -37,6 +37,7 @@ export function serializeUser(user: any) {
     vaultEnabled: user.vaultEnabled ?? false,
     vaultAsset: user.vaultAsset ?? 'usdt',
     exchange: user.exchange ?? 'bitso',
+    quote: user.quote ?? 'mxn',
     createdAt: user.createdAt,
   };
 }

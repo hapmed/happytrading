@@ -3,7 +3,7 @@ import { kv } from '../lib/kv.js';
 import { queueNotification } from '../lib/notify.js';
 import { logEvent } from '../lib/activity.js';
 import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
-import { makeExchangeClient, exchangeOf, type ExchangeClient } from '../lib/exchange.js';
+import { makeExchangeClient, exchangeOf, quoteOf, type ExchangeClient } from '../lib/exchange.js';
 
 function roundStr(n: number, dp: number): string {
   if (!isFinite(n) || n <= 0) return '0';
@@ -237,7 +237,7 @@ export async function runExecutorAll(): Promise<void> {
         cmap.set(cur, { avail: Number(b.available ?? 0), total: Number(b.total ?? 0) });
       }
       balMap.set(u.id, cmap);
-      mxnMap.set(u.id, cmap.get('mxn')?.avail ?? 0);
+      mxnMap.set(u.id, cmap.get(quoteOf(u))?.avail ?? 0);
     } catch {}
   }
   /** Cantidad disponible REAL de la moneda base de un par (evita vender de más). */

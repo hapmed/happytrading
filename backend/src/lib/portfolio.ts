@@ -40,6 +40,23 @@ export async function valuePortfolio(client: ExchangeClient, balances: any[]): P
       } catch {
         priceMxn = 0;
       }
+      // Respaldo: si no hay par en MXN (p. ej. monedas operadas en USDT),
+      // valora vía USDT: precio(moneda/USDT) × precio(USDT/MXN).
+      if (priceMxn <= 0) {
+        try {
+          const tUsd = await client.ticker(`${currency}_usdt`);
+          const pUsd = Number(tUsd?.last ?? 0);
+          if (pUsd > 0) {
+            let usdtMxn = priceCache.get('__usdtmxn') ?? 0;
+            if (!usdtMxn) {
+              const tU = await client.ticker('usdt_mxn');
+              usdtMxn = Number(tU?.last ?? 0);
+              priceCache.set('__usdtmxn', usdtMxn);
+            }
+            if (usdtMxn > 0) priceMxn = pUsd * usdtMxn;
+          }
+        } catch {}
+      }
       priceCache.set(currency, priceMxn);
     }
 

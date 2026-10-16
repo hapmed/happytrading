@@ -10,8 +10,16 @@ export type ExchangeClient = BitsoClient | BinanceClient;
 export interface ExchangeUser {
   id: string;
   exchange?: string | null;
+  quote?: string | null;
   bitsoApiKey?: string | null;
   bitsoApiSecret?: string | null;
+}
+
+/** Moneda de cotización del usuario ('mxn' | 'usdt'). Bitso siempre mxn. */
+export function quoteOf(user: ExchangeUser): string {
+  if (exchangeOf(user) !== 'binance') return 'mxn';
+  const q = (user.quote ?? 'mxn').toLowerCase();
+  return q === 'usdt' ? 'usdt' : 'mxn';
 }
 
 /** Nombre del exchange del usuario ('bitso' | 'binance'). */
@@ -31,7 +39,11 @@ export async function makeExchangeClient(user: ExchangeUser): Promise<ExchangeCl
     const s = await prisma.setting.findUnique({ where: { key: 'binance' } });
     const v = (s?.value ?? {}) as any;
     if (!v?.apiKey || !v?.secret) return null;
-    return new BinanceClient({ apiKey: String(v.apiKey), apiSecret: decrypt(String(v.secret)) });
+    return new BinanceClient({
+      apiKey: String(v.apiKey),
+      apiSecret: decrypt(String(v.secret)),
+      quote: quoteOf(user),
+    });
   }
   if (!user.bitsoApiKey || !user.bitsoApiSecret) return null;
   return new BitsoClient({ apiKey: decrypt(user.bitsoApiKey), apiSecret: decrypt(user.bitsoApiSecret) });

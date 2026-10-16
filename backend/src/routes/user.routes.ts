@@ -49,6 +49,7 @@ const tradingSchema = z.object({
   vaultEnabled: z.boolean().optional(),
   vaultAsset: z.enum(['usdt', 'usdc', 'dai']).optional(),
   exchange: z.enum(['bitso', 'binance']).optional(),
+  quote: z.enum(['mxn', 'usdt']).optional(),
 });
 
 export async function userRoutes(app: FastifyInstance) {

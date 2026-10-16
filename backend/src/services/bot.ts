@@ -78,6 +78,7 @@ async function resolveSymbols(
   profile: string,
   client: ExchangeClient,
   heldCurrencies: string[],
+  quote = 'mxn',
 ): Promise<string[]> {
   const c = (custom ?? '').trim().toLowerCase();
 
@@ -86,25 +87,26 @@ async function resolveSymbols(
     const b = await client.availableBooks();
     books = b.map((x: any) => String(x.book ?? ''));
   } catch {}
-  const mxnBooks = books.filter((bk) => bk.endsWith('_mxn'));
+  const qBooks = books.filter((bk) => bk.endsWith(`_${quote}`));
   const validSet = new Set(books);
+  const def = (SYMBOLS[profile] ?? SYMBOLS.balanced).map((s) => s.replace('_mxn', `_${quote}`));
 
   let base: string[];
   if (c === 'auto') {
-    base = mxnBooks.length ? mxnBooks : SYMBOLS[profile] ?? SYMBOLS.balanced;
+    base = qBooks.length ? qBooks : def;
   } else if (c) {
     base = c.split(',').map((s) => s.trim()).filter(Boolean);
-    // Solo pares válidos contra MXN (evita libros en USD/BTC u otros inexistentes).
-    if (books.length) base = base.filter((bk) => validSet.has(bk) && bk.endsWith('_mxn'));
+    // Solo pares válidos contra la moneda de cotización (MXN o USDT).
+    if (books.length) base = base.filter((bk) => validSet.has(bk) && bk.endsWith(`_${quote}`));
   } else {
-    base = SYMBOLS[profile] ?? SYMBOLS.balanced;
+    base = def;
   }
 
-  // Incluye las monedas que el usuario posee (solo si tienen par válido en MXN).
+  // Incluye las monedas que el usuario posee (solo si tienen par válido en la cotización).
   const set = new Set(base);
   for (const cur of heldCurrencies) {
-    if (!cur || cur === 'mxn') continue;
-    const cand = `${cur}_mxn`;
+    if (!cur || cur === quote) continue;
+    const cand = `${cur}_${quote}`;
     if (!books.length || validSet.has(cand)) set.add(cand);
   }
   return [...set];
@@ -222,8 +224,8 @@ async function planForUser(userId: string): Promise<void> {
     await logEvent(userId, `Error valuando portafolio: ${(err as Error).message.slice(0, 60)}`, 'warn');
   }
 
-  const mxn = balances.find((b) => String(b.currency).toLowerCase() === 'mxn');
-  const mxnAvailable = Number(mxn?.available ?? '0');
+  const cashBal = balances.find((b) => String(b.currency).toLowerCase() === quote);
+  const cashAvailable = Number(cashBal?.available ?? '0');
 
   // Movimientos REALES de Bitso (retiros) → NO cuentan como ganancia y reinician la bóveda.
   const movements = await syncBitsoMovements(userId, client);
@@ -240,26 +242,27 @@ async function planForUser(userId: string): Promise<void> {
   const volatileTop = user.volatileTop ?? 3;
   const dcaLevels = user.dcaLevels ? Math.max(1, Math.min(10, user.dcaLevels)) : 3;
   const dcaStepPct = user.dcaStepPct ? Number(user.dcaStepPct) : 2;
-  const vaultAsset = (user.vaultAsset || 'usdc').toLowerCase();
+  const vaultAsset = (user.vaultAsset || 'usdt').toLowerCase();
+  const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
   const heldCurrencies = balances
     .filter(
       (b: any) =>
-        String(b.currency).toLowerCase() !== 'mxn' &&
+        String(b.currency).toLowerCase() !== quote &&
         String(b.currency).toLowerCase() !== vaultAsset && // la bóveda no se opera
         Number(b.total ?? 0) > 0,
     )
     .map((b: any) => String(b.currency).toLowerCase());
-  const symbols = await resolveSymbols(user.symbols, profile, client, heldCurrencies);
+  const symbols = await resolveSymbols(user.symbols, profile, client, heldCurrencies, quote);
 
   // Reconciliación: las monedas que el usuario YA tenía (capital inicial/depósitos)
   // deben registrarse como Position para que el ejecutor pueda aplicarles SL/TP y
   // rotarlas para fondear compras. Sin esto, quedaban "invisibles" y bloqueadas.
   for (const b of balances) {
     const cur = String(b.currency).toLowerCase();
-    if (cur === 'mxn') continue;
+    if (cur === quote) continue;
     const amount = Number(b.total ?? 0);
     if (amount <= 0) continue;
-    const sym = `${cur}_mxn`;
+    const sym = `${cur}_${quote}`;
     const existing = await prisma.position.findUnique({ where: { userId_symbol: { userId, symbol: sym } } });
     const realTotal = Number(b.total ?? 0);
     if (existing) {
@@ -317,7 +320,7 @@ async function planForUser(userId: string): Promise<void> {
   }
 
   const tradingEquity = Math.max(0, equityMxn - vaultValue);
-  const cryptoValue = Math.max(0, tradingEquity - mxnAvailable);
+  const cryptoValue = Math.max(0, tradingEquity - cashAvailable);
   let profitReserve = Math.max(0, tradingEquity - workingCapital);
   if (movements.withdrawn > 0) {
     // Retiro detectado automáticamente → REINICIA la bóveda (vuelve a $0).
@@ -330,11 +333,11 @@ async function planForUser(userId: string): Promise<void> {
 
   // Mueve la ganancia a la moneda estable de la bóveda (no se opera).
   const cashReserveAmount = equityMxn * (cashReservePct / 100);
-  if (user.vaultEnabled && profitReserve >= 10) {
+  if (quote === 'mxn' && user.vaultEnabled && profitReserve >= 10) {
     const vsym = `${vaultAsset}_mxn`;
     const lim = limits.get(vsym);
     const minVal = Math.max(1, lim?.minimumValue ?? 1);
-    let sweep = Math.min(profitReserve, mxnAvailable - cashReserveAmount);
+    let sweep = Math.min(profitReserve, cashAvailable - cashReserveAmount);
     if (sweep < minVal) sweep = 0;
     if (sweep > 0) {
       try {
@@ -371,7 +374,7 @@ async function planForUser(userId: string): Promise<void> {
 
   const reservePct = cashReserveAmount;
   // Efectivo disponible para operar (sin tocar la bóveda).
-  let cashRemaining = Math.max(0, Math.min(mxnAvailable - profitReserve - reservePct, workingCapital - cryptoValue));
+  let cashRemaining = Math.max(0, Math.min(cashAvailable - profitReserve - reservePct, workingCapital - cryptoValue));
   if (profitReserve > 0.5 || vaultValue > 0.5) {
     await logEvent(
       userId,

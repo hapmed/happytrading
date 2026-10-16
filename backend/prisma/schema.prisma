@@ -33,6 +33,8 @@ model User {
   bitsoApiSecret String?
   // Exchange activo para operar: "bitso" | "binance"
   exchange       String     @default("bitso")
+  // Moneda de cotización para operar: "mxn" | "usdt" (Binance permite mínimos más bajos en USDT)
+  quote          String     @default("mxn")
 
   // Preferencias de trading
   tradingEnabled Boolean    @default(true)

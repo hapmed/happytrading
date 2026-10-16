@@ -22,10 +22,12 @@ function fromSymbol(sym: string): string {
 export class BinanceClient {
   private keyId: string;
   private secret: string;
+  private quote: string;
 
-  constructor(creds: { apiKey: string; apiSecret: string }) {
+  constructor(creds: { apiKey: string; apiSecret: string; quote?: string }) {
     this.keyId = creds.apiKey;
     this.secret = creds.apiSecret;
+    this.quote = (creds.quote ?? 'mxn').toLowerCase();
   }
 
   private sign(qs: string): string {
