@@ -11,6 +11,15 @@ const LABELS: Record<string, string> = {
   error: 'RECUPERÁNDOSE…',
 };
 
+function fmtDuration(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${d > 0 ? `${d}d ` : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
 export default function StatusBox() {
   const { user, setUser } = useAuth();
   const [act, setAct] = useState<any>(null);
@@ -39,6 +48,8 @@ export default function StatusBox() {
   const mm = Math.floor(remaining / 60000);
   const ss = Math.floor((remaining % 60000) / 1000);
 
+  const uptime = user?.autoSince ? fmtDuration(now - new Date(user.autoSince).getTime()) : '—';
+
   const toggle = async () => {
     if (busy) return;
     setBusy(true);
@@ -61,6 +72,10 @@ export default function StatusBox() {
           ))}
         </span>
         <span className="livebar-next">próxima pasada {remaining > 0 ? `${mm}:${String(ss).padStart(2, '0')}` : '¡ahora!'}</span>
+      </div>
+
+      <div className="uptime">
+        ⏱ TIEMPO EN AUTOMÁTICO: <b>{uptime}</b>
       </div>
 
       <button type="button" className={`auto-banner ${on ? 'on' : 'off'}`} onClick={toggle} disabled={busy} style={{ marginBottom: 0 }}>

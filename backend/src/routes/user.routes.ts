@@ -35,7 +35,10 @@ const tradingSchema = z.object({
 
 export async function userRoutes(app: FastifyInstance) {
   app.get('/profile', { preHandler: [authenticate] }, async (req) => {
-    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    let user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (user && user.autoTrade && !user.autoSince) {
+      user = await prisma.user.update({ where: { id: user.id }, data: { autoSince: new Date() } });
+    }
     if (!user) return { error: 'No encontrado' };
     return serializeUser(user);
   });
@@ -66,7 +69,11 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.put('/trading', { preHandler: [authenticate] }, async (req) => {
     const body = tradingSchema.parse(req.body);
-    await prisma.user.update({ where: { id: req.user.sub }, data: body });
+    const current = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const data: any = { ...body };
+    if (body.autoTrade === true && !current?.autoSince) data.autoSince = new Date();
+    if (body.autoTrade === false) data.autoSince = null;
+    await prisma.user.update({ where: { id: req.user.sub }, data });
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
     return serializeUser(user);
   });

@@ -15,6 +15,7 @@ export function serializeUser(user: any) {
     tradingEnabled: user.tradingEnabled,
     autoTrade: user.autoTrade,
     rotate: user.rotate ?? true,
+    autoSince: user.autoSince ?? null,
     volatileTop: user.volatileTop ?? 3,
     maxOrderAmount: user.maxOrderAmount?.toString() ?? null,
     stopLossPct: user.stopLossPct?.toString() ?? null,

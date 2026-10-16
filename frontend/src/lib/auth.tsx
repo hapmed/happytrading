@@ -12,6 +12,7 @@ export interface User {
   tradingEnabled: boolean;
   autoTrade: boolean;
   rotate: boolean;
+  autoSince: string | null;
   volatileTop: number | null;
   maxOrderAmount: string | null;
   stopLossPct: string | null;

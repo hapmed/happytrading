@@ -344,6 +344,13 @@ a:hover {
 
 .statuspanel.auto-on { border-color: var(--green); }
 .statuspanel.auto-off { border-color: #3a3a44; }
+.uptime {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--yellow);
+  margin-bottom: 12px;
+}
+.uptime b { color: var(--green); animation: gainBlink 2s ease-in-out infinite; }
 
 /* Todos los paneles "respiran" (siempre activo) */
 .pixel-panel { position: relative; }
