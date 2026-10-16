@@ -152,16 +152,39 @@ a:hover {
   flex: 1;
 }
 
-/* ---------- Dashboard: columna única centrada (sin huecos en PC ni móvil) ---------- */
+/* ---------- Dashboard: 1 columna en móvil; en PC se reparte en columnas ---------- */
 .dash {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
   width: 100%;
-  max-width: 1600px;
+  max-width: 1500px;
   margin: 0 auto;
 }
-.dash-full { width: 100%; min-width: 0; }
+.dash > * {
+  margin-bottom: 18px;
+}
+.dash-full {
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  /* Distribución tipo "masonry": llena las columnas sin dejar huecos */
+  .dash {
+    column-count: 2;
+    column-gap: 18px;
+  }
+  .dash > * {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Los paneles destacados ocupan todo el ancho */
+  .dash-full {
+    column-span: all;
+  }
+}
+@media (min-width: 1500px) {
+  .dash {
+    column-count: 3;
+  }
+}
 .dash .pixel-panel { margin-bottom: 0; }
 .dash > * { min-width: 0; }
 
