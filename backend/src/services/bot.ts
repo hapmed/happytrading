@@ -26,6 +26,10 @@ const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.6, agg
 const DEFAULT_ORDER_MXN = 200;
 const PLAN_TTL_H = 8; // validez de cada instrucción
 
+function uniq<T>(arr: T[]): T[] {
+  return [...new Set(arr)];
+}
+
 /** Cancela instrucciones pendientes previas del mismo par (evita duplicados). */
 async function clearPending(userId: string, symbol: string): Promise<void> {
   await prisma.instruction.updateMany({
