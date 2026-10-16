@@ -7,9 +7,18 @@ export default function Donut({ holdings, total }: { holdings: any[]; total: num
   // Dependencia estable: solo re-anima si CAMBIAN los datos (no en cada poll).
   const signature = holdings.map((h) => `${h.currency}:${h.valueMxn}`).join('|');
   useEffect(() => {
-    setReady(false);
-    const t = setTimeout(() => setReady(true), 80);
-    return () => clearTimeout(t);
+    let t: any;
+    const cycle = () => {
+      setReady(false);
+      t = setTimeout(() => setReady(true), 80);
+    };
+    cycle();
+    // Re-anima el llenado en bucle (efecto "cargando")
+    const loop = setInterval(cycle, 9000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(loop);
+    };
   }, [signature]);
 
   const sum = holdings.reduce((s, h) => s + Number(h.valueMxn || 0), 0) || 1;

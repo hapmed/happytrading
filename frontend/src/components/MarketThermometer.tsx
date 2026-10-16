@@ -8,60 +8,46 @@ interface Coin {
   bbPos: number;
   rsi: number;
   stat: 'BARATO' | 'CARO' | 'NEUTRO';
-  momentumPct: number;
-  atrPct: number;
-  trend: string;
 }
 
 /**
- * Termómetro de mercado: muestra qué tan BARATO o CARO está cada moneda según
- * estadística (z-score y posición dentro de las Bandas de Bollinger).
- * Más a la izquierda/verde = más barato = mejor para comprar.
+ * Termómetro 8-bit: cada moneda es un termómetro horizontal que se LLENA conforme
+ * se pone CARA (verde = barato → rojo = caro). Pocos datos y sin desbordes.
  */
 export default function MarketThermometer() {
   const [coins, setCoins] = useState<Coin[]>([]);
-  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const load = () =>
-      api('/me/market')
-        .then((d: any) => {
-          setCoins(d.coins ?? []);
-          setErr(null);
-        })
-        .catch((e: any) => setErr(String(e?.message ?? e)));
+    const load = () => api('/me/market').then((d: any) => setCoins(d.coins ?? [])).catch(() => {});
     load();
     const id = setInterval(load, 60000);
     return () => clearInterval(id);
   }, []);
 
-  const color = (s: string) => (s === 'BARATO' ? 'var(--green)' : s === 'CARO' ? 'var(--red)' : 'var(--muted)');
+  const color = (s: string) => (s === 'BARATO' ? 'var(--green)' : s === 'CARO' ? 'var(--red)' : 'var(--yellow)');
 
   return (
     <Panel title="◈ TERMÓMETRO DE MERCADO">
-      <div className="thermo-help">
-        Qué tan <b className="thermo-cheap">barato</b> ↔ <b className="thermo-expensive">caro</b> está cada moneda (z-score + Bandas de Bollinger, velas 5m).
-        A la <b>izquierda/verde</b> = más barato = mejor para comprar.
+      <div className="thermo2-help">
+        🌡️ Mientras más <b>lleno/rojo</b>, más <b>caro</b>. Verde y vacío = <b>barato</b> (bueno para comprar).
       </div>
-      {err && <div className="error-msg">No se pudo cargar el termómetro: {err}</div>}
-      <div className="thermo-list">
-        {coins.map((c) => (
-          <div className="thermo-row" key={c.currency}>
-            <b className="thermo-coin">{c.currency.toUpperCase()}</b>
-            <span className={`badge thermo-badge ${c.stat === 'BARATO' ? 'filled' : c.stat === 'CARO' ? 'sell' : ''}`}>{c.stat}</span>
-            <div className="thermo-bar">
-              <div className="thermo-track" />
-              <div
-                className="thermo-mark"
-                style={{ left: `${Math.min(100, Math.max(0, c.bbPos))}%`, background: color(c.stat) }}
-              />
+      <div className="thermo2-list">
+        {coins.slice(0, 10).map((c) => {
+          const pct = Math.min(100, Math.max(0, Number(c.bbPos) || 0));
+          const col = color(c.stat);
+          return (
+            <div className="thermo2-row" key={c.currency}>
+              <b className="thermo2-coin">{String(c.currency).toUpperCase()}</b>
+              <div className="thermo2-tube">
+                <div className="thermo2-fill" style={{ width: `${pct}%`, background: col, boxShadow: `0 0 10px ${col}` }} />
+              </div>
+              <span className="thermo2-badge" style={{ color: col, borderColor: col }}>
+                {c.stat === 'BARATO' ? '❄ BARATO' : c.stat === 'CARO' ? '🔥 CARO' : '• NEUTRO'}
+              </span>
             </div>
-            <span className="thermo-num thermo-z">z {c.zScore >= 0 ? '+' : ''}{c.zScore}</span>
-            <span className="thermo-num thermo-rsi">RSI {c.rsi}</span>
-            <span className="thermo-num thermo-mom">{c.momentumPct >= 0 ? '+' : ''}{c.momentumPct}%</span>
-          </div>
-        ))}
-        {!coins.length && !err && <div className="muted">Cargando…</div>}
+          );
+        })}
+        {!coins.length && <div className="muted center">Cargando…</div>}
       </div>
     </Panel>
   );
