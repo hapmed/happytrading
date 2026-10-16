@@ -170,7 +170,7 @@ export default function Portfolio() {
 
         {!hasData && (
           <div className="muted center" style={{ marginTop: 12 }}>
-            Conecta tu Bitso y pulsa ▶ EJECUTAR AHORA para empezar a ver tus ganancias.
+            Conecta Binance y pulsa ▶ EJECUTAR AHORA para empezar a ver tus ganancias.
           </div>
         )}
       </Panel>

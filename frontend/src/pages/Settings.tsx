@@ -11,41 +11,6 @@ export default function Settings() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const saveBitso = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setErr('');
-    setMsg('');
-    try {
-      await api('/me/bitso', {
-        method: 'PUT',
-        body: JSON.stringify({ apiKey, apiSecret }),
-      });
-      setApiKey('');
-      setApiSecret('');
-      setMsg('API DE BITSO CONECTADA ✔');
-      setUser({ ...user!, hasBitso: true });
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const removeBitso = async () => {
-    setBusy(true);
-    setErr('');
-    try {
-      await api('/me/bitso', { method: 'DELETE' });
-      setMsg('API DE BITSO ELIMINADA');
-      setUser({ ...user!, hasBitso: false });
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const updatePref = async (patch: any) => {
     setErr('');
     try {
@@ -66,31 +31,47 @@ export default function Settings() {
       {msg && <div className="ok-msg">{msg}</div>}
       {err && <div className="error-msg">{err}</div>}
 
-      <Panel title="◈ CONEXIÓN BITSO">
-        {user?.hasBitso ? (
-          <div>
-            <div className="ok-msg">✔ API DE BITSO CONECTADA (CLAVES CIFRADAS)</div>
-            <PixelButton variant="danger" onClick={removeBitso} disabled={busy}>
-              DESCONECTAR
-            </PixelButton>
-          </div>
-        ) : (
-          <form onSubmit={saveBitso} className="stack">
-            <p className="muted mb">
-              Genera tus claves en <strong>bitso.com → Configuración → API Keys</strong>. Solo se requieren permisos de
-              <em> lectura y trading</em>. Se cifran con AES-256 antes de guardarse.
-            </p>
-            <Field label="API KEY">
-              <input className="pixel-input" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-            </Field>
-            <Field label="API SECRET">
-              <input className="pixel-input" type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} />
-            </Field>
-            <PixelButton type="submit" variant="primary" disabled={busy}>
-              {busy ? 'GUARDANDO...' : '▶ CONECTAR'}
-            </PixelButton>
-          </form>
-        )}
+      <Panel title="◈ CONEXIÓN BINANCE">
+        <div className="ok-msg">✔ BINANCE CONECTADO (llaves cifradas en la config global)</div>
+        <p className="muted mb" style={{ fontSize: 16 }}>
+          El bot opera en <b>Binance</b> (comisiones 0.1%). Configura tus llaves de Binance en
+          <b> ADMIN → CONFIG GLOBAL → Binance</b>.
+        </p>
+      </Panel>
+
+      <Panel title="◈ RETIRO DE GANANCIAS (SPEI → CLABE)">
+        <p className="muted" style={{ fontSize: 16 }}>
+          Las ganancias se pueden transferir a tu banco por <b>SPEI</b> (Binance México). Mínimo 50 MXN.
+        </p>
+        <Field label="CLABE (18 dígitos)">
+          <input
+            className="pixel-input"
+            defaultValue={user?.payoutClabe ?? ''}
+            onBlur={(e) => updatePref({ payoutClabe: e.target.value.replace(/\D/g, '') })}
+            placeholder="014580140494367822"
+          />
+        </Field>
+        <Field label="BENEFICIARIO (titular de la cuenta)">
+          <input
+            className="pixel-input"
+            defaultValue={user?.payoutBeneficiary ?? ''}
+            onBlur={(e) => updatePref({ payoutBeneficiary: e.target.value })}
+            placeholder="Hector Pena"
+          />
+        </Field>
+        <Field label="BANCO">
+          <input
+            className="pixel-input"
+            defaultValue={user?.payoutBank ?? ''}
+            onBlur={(e) => updatePref({ payoutBank: e.target.value })}
+            placeholder="Santander"
+          />
+        </Field>
+        <Toggle
+          label="RETIRO AUTOMÁTICO DE GANANCIAS"
+          checked={!!user?.payoutEnabled}
+          onChange={(v) => updatePref({ payoutEnabled: v })}
+        />
       </Panel>
 
       <Panel title="◈ PREFERENCIAS DE TRADING">
@@ -285,31 +266,6 @@ export default function Settings() {
             />
           </Field>
         </div>
-      </Panel>
-
-      <Panel title="◈ EXCHANGE PARA OPERAR">
-        <p className="muted" style={{ fontSize: 16 }}>
-          Dónde opera el bot. <b>Binance</b>: comisiones <b>5× menores</b> (0.1% vs 0.5%), más pares y{' '}
-          <b>retiros automáticos por API</b>. Bitso: cripto MX con retiros manuales.
-        </p>
-        <div className="row" style={{ gap: 10 }}>
-          <PixelButton
-            className={user?.exchange !== 'binance' ? '' : 'danger'}
-            onClick={() => updatePref({ exchange: 'bitso' })}
-          >
-            {user?.exchange !== 'binance' ? '✔ BITSO (activo)' : 'USAR BITSO'}
-          </PixelButton>
-          <PixelButton
-            className={user?.exchange === 'binance' ? '' : 'danger'}
-            onClick={() => updatePref({ exchange: 'binance' })}
-          >
-            {user?.exchange === 'binance' ? '✔ BINANCE (activo)' : 'USAR BINANCE'}
-          </PixelButton>
-        </div>
-        <small className="muted" style={{ display: 'block', marginTop: 8 }}>
-          Al cambiar a Binance, el bot usa las llaves de Binance (Config Global → admin) y opera los pares MXN de Binance
-          (BTC, ETH, SOL, USDT, USDC).
-        </small>
       </Panel>
     </div>
   );

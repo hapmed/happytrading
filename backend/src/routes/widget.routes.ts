@@ -2,8 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { getLiveValuation } from '../lib/portfolio.js';
 import { getRegime } from '../services/regime.js';
-import { BitsoClient } from '../services/bitso.js';
-import { decrypt } from '../lib/crypto.js';
+import { makeExchangeClient } from '../lib/exchange.js';
 
 const VOL_CANDIDATES = ['btc_mxn', 'eth_mxn', 'sol_mxn', 'xrp_mxn', 'trx_mxn', 'mana_mxn', 'ltc_mxn'];
 
@@ -51,11 +50,11 @@ export async function widgetRoutes(app: FastifyInstance) {
 
     // Top 3 monedas más volátiles (para el widget)
     let top: Array<{ symbol: string; vol: number }> = [];
-    if (user.bitsoApiKey && user.bitsoApiSecret) {
+    if (true) {
       try {
-        const client = new BitsoClient({ apiKey: decrypt(user.bitsoApiKey), apiSecret: decrypt(user.bitsoApiSecret) });
+        const client = await makeExchangeClient(user);
         const vols: Array<{ symbol: string; vol: number }> = [];
-        for (const s of VOL_CANDIDATES) {
+        if (client) for (const s of VOL_CANDIDATES) {
           try {
             const t = await client.ticker(s);
             const last = Number(t.last ?? 0);

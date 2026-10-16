@@ -4,7 +4,6 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, serializeUser } from '../lib/auth.js';
 import { encrypt, decrypt } from '../lib/crypto.js';
 import { randomToken } from '../lib/crypto.js';
-import { BitsoClient } from '../services/bitso.js';
 import { getActivity, logEvent } from '../lib/activity.js';
 import { getBookLimits } from '../lib/bookLimits.js';
 import { kv } from '../lib/kv.js';
@@ -19,10 +18,6 @@ const THERMO_COINS = [
   'btc', 'eth', 'xrp', 'sol', 'ltc', 'trx', 'mana', 'ada', 'doge', 'avax', 'link', 'dot', 'atom', 'uni', 'aave',
 ];
 
-const bitsoSchema = z.object({
-  apiKey: z.string().min(1),
-  apiSecret: z.string().min(1),
-});
 
 const tradingSchema = z.object({
   autoTrade: z.boolean().optional(),
@@ -66,24 +61,6 @@ export async function userRoutes(app: FastifyInstance) {
     const body = z.object({ name: z.string().optional() }).parse(req.body);
     const user = await prisma.user.update({ where: { id: req.user.sub }, data: body });
     return serializeUser(user);
-  });
-
-  // Configuración de la API de Bitso del usuario (se cifra en reposo)
-  app.put('/bitso', { preHandler: [authenticate] }, async (req) => {
-    const body = bitsoSchema.parse(req.body);
-    await prisma.user.update({
-      where: { id: req.user.sub },
-      data: { bitsoApiKey: encrypt(body.apiKey), bitsoApiSecret: encrypt(body.apiSecret) },
-    });
-    return { ok: true };
-  });
-
-  app.delete('/bitso', { preHandler: [authenticate] }, async (req) => {
-    await prisma.user.update({
-      where: { id: req.user.sub },
-      data: { bitsoApiKey: null, bitsoApiSecret: null },
-    });
-    return { ok: true };
   });
 
   app.put('/trading', { preHandler: [authenticate] }, async (req) => {
@@ -148,23 +125,29 @@ export async function userRoutes(app: FastifyInstance) {
     return { coins, updatedAt: new Date().toISOString() };
   });
 
-  // Límites/estado de la cuenta de Bitso (para saber si Bitso bloquea operaciones).
-  app.get('/bitso-status', { preHandler: [authenticate] }, async (req, reply) => {
+  // Estado de la cuenta de Binance (permisos y saldos) — solo lectura.
+  app.get('/exchange-status', { preHandler: [authenticate] }, async (req, reply) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) {
-      return reply.code(400).send({ error: 'Bitso no conectado' });
-    }
+    if (!user) return reply.code(400).send({ error: 'Sesión inválida' });
     try {
-      const client = new BitsoClient({
-        apiKey: decrypt(user.bitsoApiKey),
-        apiSecret: decrypt(user.bitsoApiSecret),
-      });
-      const status = await client.accountStatus();
-      // Prefijo de la API key para que el usuario identifique cuál editar en Bitso.
-      const prefix = decrypt(user.bitsoApiKey).slice(0, 6);
-      return { ...status, apiKeyPrefix: `${prefix}…` };
+      const client = await makeExchangeClient(user);
+      if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
+      const account = await (client as any).accountStatus();
+      const balances = (account?.balances ?? [])
+        .filter((b: any) => Number(b.free) + Number(b.locked) > 0)
+        .map((b: any) => ({ asset: b.asset, free: b.free, locked: b.locked }));
+      return {
+        exchange: 'binance',
+        canTrade: account?.canTrade,
+        canWithdraw: account?.canWithdraw,
+        canDeposit: account?.canDeposit,
+        permissions: account?.permissions,
+        balances,
+      };
     } catch (err: any) {
       return reply.code(400).send({ error: err.message });
+    }
+  });
     }
   });
 
@@ -292,58 +275,22 @@ export async function userRoutes(app: FastifyInstance) {
       (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
       0,
     );
-    let live: any = { deposits: [], withdrawals: [], error: null };
+    let live: any = { withdrawals: [], error: null };
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (user?.bitsoApiKey && user?.bitsoApiSecret) {
-      try {
-        const client = new BitsoClient({
-          apiKey: decrypt(user.bitsoApiKey),
-          apiSecret: decrypt(user.bitsoApiSecret),
-        });
-        const [d, w] = await Promise.all([client.deposits(25), client.withdrawals(25)]);
-        live = { deposits: d, withdrawals: w, error: null };
-      } catch (err: any) {
-        live.error = err.message;
+    try {
+      const client = await makeExchangeClient(user!);
+      if (client) {
+        const w = await client.withdrawals();
+        live = { withdrawals: w, error: null };
       }
+    } catch (err: any) {
+      live.error = err.message;
     }
     return { recorded, netMxn, live };
   });
 
-  // Métodos de retiro de Bitso (diagnóstico, solo lectura): confirma SPEI/CLABE.
-  app.get('/bitso-withdrawal-methods', { preHandler: [authenticate] }, async (req, reply) => {
-    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) {
-      return reply.code(400).send({ error: 'Bitso no conectado' });
-    }
-    try {
-      const client = new BitsoClient({
-        apiKey: decrypt(user.bitsoApiKey),
-        apiSecret: decrypt(user.bitsoApiSecret),
-      });
-      const methods = await client.withdrawalMethods();
-      // Resumen legible de los métodos relevantes (SPEI/CLABE y Bitso Transfer)
-      const summary = methods.map((m: any) => ({
-        method: m.method,
-        name: m.name,
-        network: m.network,
-        protocol: m.protocol,
-        required_fields: m.required_fields,
-        optional_fields: m.optional_fields,
-        security: (m.security?.modes ?? []).map((s: any) => ({
-          type: s.type,
-          from: s.from_amount,
-          to: s.to_amount,
-        })),
-        mxn: (m.currency_configurations ?? []).find((c: any) => c.currency === 'mxn') ?? null,
-      }));
-      return { methods: summary };
-    } catch (err: any) {
-      return reply.code(400).send({ error: err.message });
-    }
-  });
-
-  // "Vaciar": vende TODAS las posiciones. Con convert:'mxn' deja el dinero en pesos
-  // (para transferir a Binance); con convert:'vault' lo pasa a la moneda estable.
+  // "Vaciar": vende TODAS las posiciones. Con convert:'mxn' deja el dinero en pesos;
+  // con convert:'vault' lo pasa a la moneda estable.
   app.post('/vault/empty', { preHandler: [authenticate] }, async (req, reply) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
     if (!user || !hasExchangeCreds(user)) return reply.code(400).send({ error: 'Exchange no configurado' });
@@ -532,11 +479,10 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   // Retiro de ganancias por SPEI a la CLABE configurada.
+  // Retiro de ganancias por SPEI a la CLABE configurada (Binance fiat withdraw).
   app.post('/payout', { preHandler: [authenticate] }, async (req, reply) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
-    if (!user?.bitsoApiKey || !user?.bitsoApiSecret) {
-      return reply.code(400).send({ error: 'Bitso no conectado' });
-    }
+    if (!user) return reply.code(400).send({ error: 'Sesión inválida' });
     const clabe = (user.payoutClabe ?? '').replace(/\D/g, '');
     if (clabe.length !== 18) {
       return reply.code(400).send({ error: 'Configura una CLABE de 18 dígitos en Config → Retiro de ganancias' });
@@ -545,42 +491,36 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Configura el nombre del beneficiario' });
     }
     try {
-      const client = new BitsoClient({
-        apiKey: decrypt(user.bitsoApiKey),
-        apiSecret: decrypt(user.bitsoApiSecret),
-      });
-      // Monto disponible en MXN
+      const client = await makeExchangeClient(user);
+      if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
+
       const bals = await client.balance();
-      const mxn = bals.find((b: any) => String(b.currency).toLowerCase() === 'mxn');
-      const available = Number(mxn?.available ?? 0);
+      const cash = bals.find((b: any) => String(b.currency).toLowerCase() === quoteOf(user));
+      const available = Number(cash?.available ?? 0);
+
       const body = (req.body ?? {}) as { amount?: number };
       const requested = Number(body.amount ?? 0);
-
-      // Ganancia = valor actual - (capital inicial + depósitos netos)
       const deps = await prisma.deposit.findMany({ where: { userId: user.id } });
       const netDeposits = deps.reduce(
         (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
         0,
       );
       const invested = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
-
       let { currentValue } = await getLiveValuation(user.id);
       const workingCapital = user.workingCapitalMxn ? Number(user.workingCapitalMxn) : invested;
       const profit = Math.max(0, currentValue - Math.max(workingCapital, invested));
 
-      // No se puede retirar más de lo disponible ni más que la ganancia calculada.
-      const maxByProfit = Math.max(0, available);
-      const amount = requested > 0 ? Math.min(requested, maxByProfit) : Math.min(profit, maxByProfit);
-      if (!(amount >= 1)) {
+      const amount = requested > 0 ? Math.min(requested, available) : Math.min(profit, available);
+      if (!(amount >= 50)) {
         return reply.code(400).send({
-          error: `Monto insuficiente para retirar (disponible $${available.toFixed(2)}, ganancia $${profit.toFixed(2)})`,
+          error: `Monto insuficiente (disponible $${available.toFixed(2)}, ganancia $${profit.toFixed(2)}; mínimo SPEI 50)`,
         });
       }
-      const w = await client.createSpeiWithdrawal({
+      const w = await (client as any).fiatWithdrawMxn({
         amountMxn: Math.round(amount * 100) / 100,
         clabe,
         beneficiary: user.payoutBeneficiary,
-        notes: 'Ganancias HappyTrading',
+        bank: user.payoutBank ?? undefined,
       });
       await prisma.deposit.create({
         data: {
@@ -588,19 +528,12 @@ export async function userRoutes(app: FastifyInstance) {
           currency: 'mxn',
           amount: String(w?.amount ?? amount),
           kind: 'WITHDRAWAL',
-          note: `spei:${w?.wid ?? w?.origin_id ?? 'retiro'}`,
+          note: `binance-spei:${w?.orderId ?? w?.id ?? 'retiro'}`,
         },
       });
       return { ok: true, withdrawal: w };
     } catch (err: any) {
-      const msg = String(err?.message ?? '');
-      if (/0202|no permission/i.test(msg)) {
-        return reply.code(400).send({
-          error:
-            'Tu API key de Bitso no tiene permiso de RETIROS. Actívalo en Bitso → Configuración → API Keys → edita la key y habilita "Retiros" (withdrawals). Luego vuelve a guardar la key en Config → Bitso.',
-        });
-      }
-      return reply.code(400).send({ error: msg });
+      return reply.code(400).send({ error: String(err?.message ?? err) });
     }
   });
 

@@ -84,9 +84,9 @@ export default function ProfitVault() {
 
       <div className="vault-foot">
         <div className="vault-help">
-          El bot mueve las ganancias a <b>{asset}</b> (moneda estable) y <b>no las opera</b>. Para cobrar: en la app de
-          Bitso <b>vende {asset} → pesos</b> y retira por SPEI (o envía la {asset} a tu cuenta). El retiro se{' '}
-          <b>detecta automáticamente</b> y la bóveda se <b>reinicia a $0</b>. ✨
+          El bot mueve las ganancias a <b>{asset}</b> (moneda estable) y <b>no las opera</b>. En Binance puedes{' '}
+          <b>vender {asset} → pesos</b> y retirar por SPEI. El retiro se <b>detecta automáticamente</b> y la bóveda se{' '}
+          <b>reinicia a $0</b>. ✨
         </div>
       </div>
     </Panel>

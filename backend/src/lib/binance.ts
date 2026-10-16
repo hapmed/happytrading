@@ -181,6 +181,34 @@ export class BinanceClient {
     return this.request<any>('GET', '/api/v3/account', {}, true);
   }
 
+  /**
+   * Retiro de MXN por SPEI a una CLABE (Binance México / Medá).
+   * Requiere permiso de Retiros + IP whitelist.
+   */
+  async fiatWithdrawMxn(params: { amountMxn: number; clabe: string; beneficiary: string; bank?: string }) {
+    const accountInfo = JSON.stringify({
+      accountNumber: params.clabe,
+      beneficiaryName: params.beneficiary,
+      ...(params.bank ? { bankName: params.bank } : {}),
+    });
+    return this.request<any>(
+      'POST',
+      '/sapi/v2/fiat/withdraw',
+      {
+        currency: 'MXN',
+        apiPaymentMethod: 'WITHDRAW_MEDA',
+        amount: params.amountMxn.toFixed(2),
+        accountInfo,
+      },
+      true,
+    );
+  }
+
+  /** Historial de retiros fiat (MXN). */
+  async fiatWithdrawHistory() {
+    return this.request<any[]>('GET', '/sapi/v1/fiat/orders', { transactionType: 1, rows: 50 }, true);
+  }
+
   async ping(): Promise<boolean> {
     try {
       await this.request<any>('GET', '/api/v3/ping');

@@ -19,10 +19,6 @@ const smtpSchema = z.object({
 const settingsSchema = z.object({
   smtp: smtpSchema.nullable().optional(),
   binance: z.object({ apiKey: z.string().optional(), secret: z.string().optional() }).nullable().optional(),
-  alpaca: z
-    .object({ keyId: z.string().optional(), secret: z.string().optional(), baseUrl: z.string().optional() })
-    .nullable()
-    .optional(),
   gemini: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   openrouter: z.object({ apiKey: z.string().optional(), model: z.string().optional() }).nullable().optional(),
   bot: z.object({ intervalMs: z.number().int().min(30000).optional(), regimeFilter: z.boolean().optional() }).nullable().optional(),
@@ -129,7 +125,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const body = settingsSchema.parse(req.body);
 
     const existing = await prisma.setting.findMany({
-      where: { key: { in: ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot', 'alpaca'] } },
+      where: { key: { in: ['smtp', 'gemini', 'openrouter', 'registration_token', 'turnstile', 'bot'] } },
     });
     const map = new Map(existing.map((r) => [r.key, r.value]));
 
@@ -168,20 +164,6 @@ export async function adminRoutes(app: FastifyInstance) {
         if (!bn.apiKey || !bn.secret) bn = {};
       }
       await upsert('binance', bn);
-    }
-    if (body.alpaca !== undefined) {
-      let al: any = body.alpaca;
-      if (al) {
-        const prev = (map.get('alpaca') as any) ?? {};
-        al = {
-          keyId: al.keyId ?? prev.keyId ?? '',
-          baseUrl: al.baseUrl || prev.baseUrl || 'https://api.alpaca.markets',
-          // El secret se guarda CIFRADO; si llega enmascarado, se conserva el anterior.
-          secret: al.secret && al.secret !== MASK ? encrypt(al.secret) : (prev.secret ?? ''),
-        };
-        if (!al.keyId || !al.secret) al = {};
-      }
-      await upsert('alpaca', al);
     }
     if (body.gemini !== undefined) {
       let gemini: any = body.gemini;

@@ -36,7 +36,7 @@ export default function HowItWorks() {
       </Panel>
 
       <Panel title="🔁 EL CICLO, PASO A PASO">
-        <div className="how-step"><b>1.</b> La IA lee tu saldo y los precios de Bitso.</div>
+        <div className="how-step"><b>1.</b> La IA lee tu saldo y los precios del mercado.</div>
         <div className="how-step"><b>2.</b> Le pregunta a la IA (Gemini/OpenRouter) por cada moneda → <b>COMPRAR / ESPERAR / VENDER</b>.</div>
         <div className="how-step"><b>3.</b> Si dice comprar, deja una <b>escalera</b> (DCA): «compra si baja a X, luego a Y, luego a Z» (por tramos, no todo de golpe).</div>
         <div className="how-step"><b>4.</b> Si ya tienes la moneda, deja «vende si sube a T (ganancia) o baja a S (pérdida)».</div>
@@ -62,7 +62,7 @@ export default function HowItWorks() {
         <div className="how-step"><b>Stop-Loss / Take-Profit:</b> vende solo al tocar los niveles que configuraste.</div>
         <div className="how-step"><b>Reserva de efectivo:</b> guarda un % para no gastar todo.</div>
         <div className="how-step"><b>Régimen:</b> no compra cuando el mercado está en rojo.</div>
-        <div className="how-step"><b>Mínimos de Bitso:</b> no manda órdenes inválidas.</div>
+        <div className="how-step"><b>Mínimos del exchange:</b> no manda órdenes inválidas.</div>
         <div className="how-step"><b>Tu perfil:</b> conservador, equilibrado o agresivo (más/menos operaciones).</div>
       </Panel>
 

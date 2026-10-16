@@ -1,50 +1,37 @@
-// Fábrica de cliente de exchange: devuelve Bitso o Binance según el usuario.
-// Los dos clientes exponen la misma interfaz (balance/ticker/availableBooks/placeOrder/withdrawals).
+// Cliente de exchange: la app opera SOLO con Binance.
+// (Se eliminó Bitso y Alpaca.)
 import { prisma } from './prisma.js';
 import { decrypt } from './crypto.js';
-import { BitsoClient } from '../services/bitso.js';
 import { BinanceClient } from './binance.js';
 
-export type ExchangeClient = BitsoClient | BinanceClient;
+export type ExchangeClient = BinanceClient;
 
 export interface ExchangeUser {
   id: string;
-  exchange?: string | null;
   quote?: string | null;
-  bitsoApiKey?: string | null;
-  bitsoApiSecret?: string | null;
 }
 
-/** Moneda de cotización del usuario ('mxn' | 'usdt'). Bitso siempre mxn. */
+export const exchangeName = (): string => 'binance';
+
+/** Moneda de cotización del usuario ('mxn' | 'usdt'). */
 export function quoteOf(user: ExchangeUser): string {
-  if (exchangeOf(user) !== 'binance') return 'mxn';
   const q = (user.quote ?? 'mxn').toLowerCase();
   return q === 'usdt' ? 'usdt' : 'mxn';
 }
 
-/** Nombre del exchange del usuario ('bitso' | 'binance'). */
-export function exchangeOf(user: ExchangeUser): string {
-  return (user.exchange ?? 'bitso').toLowerCase() === 'binance' ? 'binance' : 'bitso';
+/** La app es Binance-only: siempre hay credenciales globales (o el cliente devuelve null). */
+export function hasExchangeCreds(_user: ExchangeUser): boolean {
+  return true;
 }
 
-/** ¿El usuario tiene credenciales para operar en su exchange? */
-export function hasExchangeCreds(user: ExchangeUser): boolean {
-  if (exchangeOf(user) === 'binance') return true; // las llaves de Binance son globales (settings)
-  return Boolean(user.bitsoApiKey && user.bitsoApiSecret);
-}
-
-/** Crea el cliente del exchange del usuario (o null si no está configurado). */
+/** Crea el cliente de Binance (null si no está configurado en la config global). */
 export async function makeExchangeClient(user: ExchangeUser): Promise<ExchangeClient | null> {
-  if (exchangeOf(user) === 'binance') {
-    const s = await prisma.setting.findUnique({ where: { key: 'binance' } });
-    const v = (s?.value ?? {}) as any;
-    if (!v?.apiKey || !v?.secret) return null;
-    return new BinanceClient({
-      apiKey: String(v.apiKey),
-      apiSecret: decrypt(String(v.secret)),
-      quote: quoteOf(user),
-    });
-  }
-  if (!user.bitsoApiKey || !user.bitsoApiSecret) return null;
-  return new BitsoClient({ apiKey: decrypt(user.bitsoApiKey), apiSecret: decrypt(user.bitsoApiSecret) });
+  const s = await prisma.setting.findUnique({ where: { key: 'binance' } });
+  const v = (s?.value ?? {}) as any;
+  if (!v?.apiKey || !v?.secret) return null;
+  return new BinanceClient({
+    apiKey: String(v.apiKey),
+    apiSecret: decrypt(String(v.secret)),
+    quote: quoteOf(user),
+  });
 }

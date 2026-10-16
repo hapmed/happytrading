@@ -3,7 +3,7 @@ import { kv } from '../lib/kv.js';
 import { queueNotification } from '../lib/notify.js';
 import { logEvent } from '../lib/activity.js';
 import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
-import { makeExchangeClient, exchangeOf, quoteOf, type ExchangeClient } from '../lib/exchange.js';
+import { makeExchangeClient, quoteOf, type ExchangeClient } from '../lib/exchange.js';
 
 function roundStr(n: number, dp: number): string {
   if (!isFinite(n) || n <= 0) return '0';
@@ -197,7 +197,7 @@ export async function runExecutorAll(): Promise<void> {
   const limitsCache = new Map<string, Map<string, BookLimits>>();
   const getLimits = async (userId: string): Promise<Map<string, BookLimits>> => {
     const u = users.find((x) => x.id === userId);
-    const exch = u ? exchangeOf(u) : 'bitso';
+    const exch = 'binance';
     let m = limitsCache.get(exch);
     if (!m) {
       for (const c of clientList) {

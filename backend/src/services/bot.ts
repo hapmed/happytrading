@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { kv } from '../lib/kv.js';
 import { generateSignal } from './ai.js';
-import { makeExchangeClient, exchangeOf, hasExchangeCreds, type ExchangeClient } from '../lib/exchange.js';
+import { makeExchangeClient, hasExchangeCreds, type ExchangeClient } from '../lib/exchange.js';
 import { setState, logEvent } from '../lib/activity.js';
 import { valuePortfolio } from '../lib/portfolio.js';
 import { getRegime } from './regime.js';
@@ -187,7 +187,7 @@ async function planForUser(userId: string): Promise<void> {
     await logEvent(userId, 'Faltan credenciales del exchange configurado', 'warn');
     return;
   }
-  const exch = exchangeOf(user);
+  const exch = 'binance';
 
   const limits = await getBookLimits(client, exch).catch(() => new Map<string, BookLimits>());
 

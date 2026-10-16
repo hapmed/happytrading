@@ -30,16 +30,15 @@ export default function Dashboard() {
           setSignals(s);
         })
         .catch((e) => setError(e.message));
-      if (user?.hasBitso) {
+      if (true) {
         api('/me/balance')
           .then((d) => setBalances(d.balances ?? []))
           .catch(() => {});
-      }
-    };
+      }    };
     load();
     const id = setInterval(load, 6000);
     return () => clearInterval(id);
-  }, [user?.hasBitso]);
+  }, []);
 
   const buys = trades.filter((t) => t.side === 'BUY').length;
   const sells = trades.filter((t) => t.side === 'SELL').length;
@@ -61,11 +60,6 @@ export default function Dashboard() {
         <span className="floaty" style={{ fontSize: 26 }}>🪙</span>
       </div>
 
-      {!user?.hasBitso && (
-        <div className="error-msg">
-          ⚠ NO HAS CONECTADO TU API DE BITSO. VE A <Link to="/settings">CONFIG</Link> PARA CONECTARLA.
-        </div>
-      )}
       {error && <div className="error-msg">{error}</div>}
 
       <div className="dash">
