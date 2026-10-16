@@ -61,6 +61,17 @@ export function sfxError(): void {
   tone(160, 0.22, 'sawtooth', 0.12);
 }
 
+/** "retiro": fanfarria 8-bit de celebración (cuando se transfiere a tu CLABE). */
+export function sfxWithdraw(): void {
+  if (muted) return;
+  const notes = [523, 659, 784, 1047, 1319, 1568, 2093];
+  notes.forEach((f, i) => tone(f, 0.13, 'square', i * 0.085, 0.06));
+  // Remate: acorde brillante
+  tone(1568, 0.5, 'square', 0.62, 0.05);
+  tone(2093, 0.5, 'square', 0.62, 0.04);
+  tone(1047, 0.6, 'triangle', 0.62, 0.05);
+}
+
 // Reanuda el audio en el primer gesto del usuario (política de autoplay).
 if (typeof window !== 'undefined') {
   const resume = () => {
