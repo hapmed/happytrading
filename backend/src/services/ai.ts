@@ -230,6 +230,8 @@ interface Attempt {
   provider: string;
   model: string;
   key: string;
+  /** Prioridad: 1 = OmniRoute (preferido), 2 = OpenRouter/Mistral/extras, 3 = Gemini (último). */
+  tier: number;
   run: (model: string, key: string, prompt: string) => Promise<Res>;
 }
 
@@ -286,14 +288,17 @@ async function callOpenaiCompat(p: CustomProvider, model: string, prompt: string
   }
 }
 
-function interleave(list: Attempt[]): Attempt[] {
-  const g = list.filter((a) => a.provider === 'gemini');
-  const o = list.filter((a) => a.provider !== 'gemini');
+/**
+ * Ordena los intentos por prioridad (tier) y rota dentro de cada tier para repartir carga.
+ * Tier 1 = OmniRoute (preferido). Tier 2 = OpenRouter/Mistral/extras. Tier 3 = Gemini (último recurso).
+ */
+function orderByTier(list: Attempt[], seed: number): Attempt[] {
+  const tiers = [...new Set(list.map((a) => a.tier))].sort((a, b) => a - b);
   const out: Attempt[] = [];
-  const max = Math.max(g.length, o.length);
-  for (let i = 0; i < max; i++) {
-    if (g[i]) out.push(g[i]);
-    if (o[i]) out.push(o[i]);
+  for (const t of tiers) {
+    const group = list.filter((a) => a.tier === t);
+    const off = group.length ? ((seed % group.length) + group.length) % group.length : 0;
+    out.push(...group.slice(off), ...group.slice(0, off));
   }
   return out;
 }
@@ -308,16 +313,16 @@ export async function generateSignal(symbol: string, ctx: MarketContext): Promis
     const attempts: Attempt[] = [];
     if (cfg.gemini.apiKey && (await isProviderAllowed('gemini'))) {
       for (const m of uniq([cfg.gemini.model, ...GEMINI_FALLBACKS]).slice(0, MAX_PER_PROVIDER)) {
-        attempts.push({ provider: 'gemini', model: m, key: cfg.gemini.apiKey, run: callGemini });
+        attempts.push({ provider: 'gemini', model: m, key: cfg.gemini.apiKey, run: callGemini, tier: 3 });
       }
     }
     if (cfg.openrouter.apiKey && (await isProviderAllowed('openrouter'))) {
       for (const m of uniq([cfg.openrouter.model, ...OPENROUTER_FALLBACKS]).slice(0, MAX_PER_PROVIDER)) {
-        attempts.push({ provider: 'openrouter', model: m, key: cfg.openrouter.apiKey, run: callOpenRouter });
+        attempts.push({ provider: 'openrouter', model: m, key: cfg.openrouter.apiKey, run: callOpenRouter, tier: 2 });
       }
     }
 
-    // Proveedores extra OpenAI-compatible (Groq, GitHub Models, Mistral, etc.)
+    // Proveedores extra OpenAI-compatible (OmniRoute, Groq, GitHub Models, Mistral, UncloseAI, etc.)
     for (const p of await getProviders()) {
       const lim = {
         requestsPerDay: p.requestsPerDay ?? 500,
@@ -325,20 +330,20 @@ export async function generateSignal(symbol: string, ctx: MarketContext): Promis
         requestsPerMinute: p.requestsPerMinute ?? 6,
       };
       if (!(await isProviderAllowed(p.name, lim))) continue;
+      // OmniRoute es el preferido (tier 1); el resto de extras va en tier 2.
+      const tier = p.name.toLowerCase() === 'omniroute' ? 1 : 2;
       for (const m of uniq(p.models ?? []).slice(0, MAX_PER_PROVIDER)) {
-        attempts.push({ provider: p.name, model: m, key: p.apiKey, run: (mo, _k, pr) => callOpenaiCompat(p, mo, pr) });
+        attempts.push({ provider: p.name, model: m, key: p.apiKey, run: (mo, _k, pr) => callOpenaiCompat(p, mo, pr), tier });
       }
     }
 
     if (!attempts.length) throw new Error('Sin IA disponible (límites diarios alcanzados o no configurada)');
 
-    const interleaved = interleave(attempts);
-    let offset = 0;
+    let seed = 0;
     try {
-      const n = await kv.incr('ai:rotation');
-      offset = n % interleaved.length;
+      seed = await kv.incr('ai:rotation');
     } catch {}
-    const ordered = [...interleaved.slice(offset), ...interleaved.slice(0, offset)];
+    const ordered = orderByTier(attempts, seed);
 
     const prompt = buildPrompt(symbol, ctx);
     const errors: string[] = [];
