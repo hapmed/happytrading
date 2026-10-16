@@ -142,7 +142,7 @@ export default function Portfolio() {
         </div>
         <div className={`pnl-hero ${gain ? 'gain' : 'loss'}`}>
           <div className="pnl-wolf">
-            <img src={gain ? '/wolf.png' : '/wolf-loss.png'} alt="El Lobo" className="wolf-img" />
+            <img src="/wolf.png" alt="El Lobo" className="wolf-img" />
           </div>
           <div className="pnl-info">
             <div className="pnl-label">{gain ? '▲ GANANCIA TOTAL' : '▼ PÉRDIDA TOTAL'}</div>
