@@ -218,6 +218,7 @@ async function planForUser(userId: string): Promise<void> {
   const riskPct = user.riskPct ? Number(user.riskPct) : 1;
   const cashReservePct = user.cashReservePct != null ? Number(user.cashReservePct) : 30;
   const stopLossPct = user.stopLossPct ? Number(user.stopLossPct) : 0;
+  const takeProfitPct = user.takeProfitPct ? Number(user.takeProfitPct) : 0;
 
   const profile = user.profile ?? 'balanced';
   const minConf = MIN_CONF[profile] ?? 0.6;
@@ -363,6 +364,24 @@ async function planForUser(userId: string): Promise<void> {
       };
 
       const signal = await generateSignal(symbol, ctx);
+
+      // OVERRIDE ESTADÍSTICO: si la estadística dice BARATO y el spread es bajo,
+      // el bot COMPRA aunque la IA haya respondido HOLD (la IA solo puede vetar con SELL).
+      const bid0 = Number(ticker.bid ?? 0);
+      const ask0 = Number(ticker.ask ?? 0);
+      const mid0 = bid0 > 0 && ask0 > 0 ? (bid0 + ask0) / 2 : last;
+      const spread0 = mid0 > 0 && ask0 > bid0 ? ((ask0 - bid0) / mid0) * 100 : 0;
+      if (indicators && indicators.stat === 'BARATO' && signal.action === 'HOLD' && spread0 <= 0.6 && last > 0) {
+        signal.action = 'BUY';
+        signal.confidence = Math.max(signal.confidence, 0.6);
+        signal.reasoning = `BARATO z=${indicators.zScore} RSI=${indicators.rsi} (estadística)`;
+        await logEvent(
+          userId,
+          `📈 Override estadístico ${symbol} → BUY (barato: z=${indicators.zScore}, RSI=${indicators.rsi}, spread ${spread0.toFixed(2)}%)`,
+          'ok',
+        );
+      }
+
       await prisma.signal.create({
         data: {
           userId, symbol, action: signal.action, confidence: signal.confidence, reasoning: signal.reasoning,
@@ -416,12 +435,20 @@ async function planForUser(userId: string): Promise<void> {
         cashRemaining = Math.max(0, cashRemaining - spend);
         const per = spend / levels;
         const expires = new Date(Date.now() + PLAN_TTL_H * 3600 * 1000);
+        // Niveles por operación: usa los de la IA si son coherentes; si no, los del usuario.
+        const sl = signal.stopLossPrice > 0 && signal.stopLossPrice < entry
+          ? signal.stopLossPrice
+          : stopLossPct > 0 ? entry * (1 - stopLossPct / 100) : 0;
+        const tp = signal.takeProfitPrice > 0 && signal.takeProfitPrice > entry
+          ? signal.takeProfitPrice
+          : takeProfitPct > 0 ? entry * (1 + takeProfitPct / 100) : 0;
         for (let i = 0; i < levels; i++) {
           const price = entry * (1 - (i * dcaStepPct) / 100);
           await prisma.instruction.create({
             data: {
               userId, symbol, side: 'BUY', trigger: 'price_below', triggerPrice: String(price),
               amountMxn: String(per), reason: `${signal.reasoning} (DCA ${i + 1}/${levels})`, status: 'PENDING', expiresAt: expires,
+              slPriceMxn: sl > 0 ? String(sl) : null, tpPriceMxn: tp > 0 ? String(tp) : null,
             },
           });
         }

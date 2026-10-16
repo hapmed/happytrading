@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { decrypt } from '../lib/crypto.js';
+import { kv } from '../lib/kv.js';
 import { BitsoClient } from './bitso.js';
 import { queueNotification } from '../lib/notify.js';
 import { logEvent } from '../lib/activity.js';
@@ -11,7 +12,14 @@ function roundStr(n: number, dp: number): string {
   return s.replace(/\.?0+$/, '') || '0';
 }
 
-async function applyPosition(userId: string, symbol: string, side: 'BUY' | 'SELL', qty: number, priceMxn: number): Promise<void> {
+async function applyPosition(
+  userId: string,
+  symbol: string,
+  side: 'BUY' | 'SELL',
+  qty: number,
+  priceMxn: number,
+  levels?: { sl?: number; tp?: number },
+): Promise<void> {
   if (qty <= 0) return;
   const key = { userId_symbol: { userId, symbol } };
   const existing = await prisma.position.findUnique({ where: key });
@@ -20,10 +28,13 @@ async function applyPosition(userId: string, symbol: string, side: 'BUY' | 'SELL
     const oldCost = existing ? Number(existing.avgCostMxn) : 0;
     const newQty = oldQty + qty;
     const newAvg = newQty > 0 ? (oldQty * oldCost + qty * priceMxn) / newQty : 0;
+    // Conserva los niveles previos si esta compra no trae nuevos.
+    const sl = levels?.sl && levels.sl > 0 ? String(levels.sl) : existing?.slPriceMxn ?? null;
+    const tp = levels?.tp && levels.tp > 0 ? String(levels.tp) : existing?.tpPriceMxn ?? null;
     await prisma.position.upsert({
       where: key,
-      update: { baseAmount: String(newQty), avgCostMxn: String(newAvg) },
-      create: { userId, symbol, baseAmount: String(newQty), avgCostMxn: String(newAvg) },
+      update: { baseAmount: String(newQty), avgCostMxn: String(newAvg), slPriceMxn: sl, tpPriceMxn: tp },
+      create: { userId, symbol, baseAmount: String(newQty), avgCostMxn: String(newAvg), slPriceMxn: sl, tpPriceMxn: tp },
     });
   } else if (existing) {
     await prisma.position.update({ where: key, data: { baseAmount: String(Math.max(0, Number(existing.baseAmount) - qty)) } });
@@ -59,8 +70,13 @@ async function rotateToFund(
   limits: Map<string, any>,
 ): Promise<string | null> {
   const lastT = rotateCooldown.get(userId) ?? 0;
-  if (Date.now() - lastT < 60_000) return null;
+  if (Date.now() - lastT < 180_000) return null; // máx. 1 rotación cada 3 min
   if (Date.now() < accountBlockedUntil) return null; // Bitso bloqueado por límites de cuenta
+
+  // Anti-churn: cada rotación cuesta spread + comisión. Tope de rotaciones por hora.
+  const rotKey = `rot:${userId}:${new Date().getHours()}`;
+  const rotCount = Number((await kv.get(rotKey)) ?? 0);
+  if (rotCount >= 4) return null;
 
   const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 } } });
   const others = positions.filter((p) => p.symbol !== excludeSymbol);
@@ -105,6 +121,7 @@ async function rotateToFund(
       },
     });
     await applyPosition(userId, best.symbol, 'SELL', sellQty, best.price);
+    await kv.set(rotKey, String(rotCount + 1), 3600).catch(() => {});
     return best.symbol;
   } catch (err) {
     console.error(`[rotateToFund] venta ${best.symbol} falló:`, (err as Error).message);
@@ -248,7 +265,10 @@ export async function runExecutorAll(): Promise<void> {
             status: 'PENDING', source: 'AI', reason: ins.reason ?? null, externalId: placed?.oid ? String(placed.oid) : null,
           },
         });
-        await applyPosition(user.id, ins.symbol, 'BUY', price > 0 ? minor / price : 0, price);
+        await applyPosition(user.id, ins.symbol, 'BUY', price > 0 ? minor / price : 0, price, {
+          sl: ins.slPriceMxn ? Number(ins.slPriceMxn) : undefined,
+          tp: ins.tpPriceMxn ? Number(ins.tpPriceMxn) : undefined,
+        });
         await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'EXECUTED', executedAt: new Date(), tradeId: trade.id } });
         // Descontar el MXN gastado para no sobre-comprar en la misma pasada.
         mxnMap.set(ins.userId, Math.max(0, mxn - minor));
@@ -303,15 +323,18 @@ export async function runExecutorAll(): Promise<void> {
   for (const pos of positions) {
     const user = users.find((u) => u.id === pos.userId);
     if (!user) continue;
-    const sl = user.stopLossPct ? Number(user.stopLossPct) : 0;
-    const tp = user.takeProfitPct ? Number(user.takeProfitPct) : 0;
-    if (sl <= 0 && tp <= 0) continue;
+    const slPct = user.stopLossPct ? Number(user.stopLossPct) : 0;
+    const tpPct = user.takeProfitPct ? Number(user.takeProfitPct) : 0;
+    const slPrice = pos.slPriceMxn ? Number(pos.slPriceMxn) : 0;
+    const tpPrice = pos.tpPriceMxn ? Number(pos.tpPriceMxn) : 0;
+    if (slPct <= 0 && tpPct <= 0 && slPrice <= 0 && tpPrice <= 0) continue;
     const price = priceMap.get(pos.symbol) ?? 0;
+    if (price <= 0) continue;
     const avg = Number(pos.avgCostMxn);
-    if (price <= 0 || avg <= 0) continue;
-    const changePct = ((price - avg) / avg) * 100;
-    const hitSL = sl > 0 && changePct <= -sl;
-    const hitTP = tp > 0 && changePct >= tp;
+    const changePct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
+    // Prioriza los niveles por operación (de la IA); si no hay, usa los % del usuario.
+    const hitSL = slPrice > 0 ? price <= slPrice : slPct > 0 && changePct <= -slPct;
+    const hitTP = tpPrice > 0 ? price >= tpPrice : tpPct > 0 && changePct >= tpPct;
     if (!hitSL && !hitTP) continue;
 
     const client = clients.get(user.id)!;

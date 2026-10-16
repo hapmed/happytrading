@@ -160,6 +160,9 @@ model Position {
   symbol     String
   baseAmount Decimal  @db.Decimal(18, 8)
   avgCostMxn Decimal  @db.Decimal(18, 8)
+  // Niveles por operación propuestos por la IA (opcionales)
+  slPriceMxn Decimal? @db.Decimal(18, 8)
+  tpPriceMxn Decimal? @db.Decimal(18, 8)
   updatedAt  DateTime @updatedAt
 
   @@unique([userId, symbol])
@@ -176,6 +179,9 @@ model Instruction {
   triggerPrice Decimal   @db.Decimal(18, 8)
   amountMxn    Decimal?  @db.Decimal(18, 8) // para BUY (gasto en MXN)
   quantity     Decimal?  @db.Decimal(18, 8) // para SELL (cantidad del activo)
+  // Niveles por operación propuestos por la IA (opcionales)
+  slPriceMxn   Decimal?  @db.Decimal(18, 8)
+  tpPriceMxn   Decimal?  @db.Decimal(18, 8)
   reason       String?
   status       String    @default("PENDING") // PENDING | EXECUTED | EXPIRED | CANCELLED
   expiresAt    DateTime?
