@@ -125,6 +125,11 @@ export class BitsoClient {
     return data.payload ?? [];
   }
 
+  /** GET arbitrario (diagnóstico de endpoints). */
+  async probe(path: string) {
+    return this.request<any>('GET', path);
+  }
+
   /**
    * Retiro SPEI a una CLABE bancaria (método "praxis").
    * Bitso puede exigir confirmación por PIN/OTP según el monto.
