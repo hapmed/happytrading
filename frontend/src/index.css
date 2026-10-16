@@ -869,6 +869,61 @@ a:hover {
   to { opacity: 1; transform: none; }
 }
 
+/* ---------- Plan de la IA -> Worker ---------- */
+.plan-panel { position: relative; }
+.plan-flow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border: 3px dashed var(--panel-border);
+  background: var(--bg);
+  margin-bottom: 12px;
+}
+.plan-node { font-family: var(--font-pixel); font-size: 9px; color: var(--cyan); }
+.plan-arrow { display: flex; gap: 5px; flex: 1; align-items: center; }
+.plan-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: flowDot 1.4s ease-in-out infinite;
+}
+.plan-dot:nth-child(2) { animation-delay: 0.25s; }
+.plan-dot:nth-child(3) { animation-delay: 0.5s; }
+@keyframes flowDot {
+  0%, 100% { opacity: 0.25; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(6px); }
+}
+.plan-state { font-family: var(--font-pixel); font-size: 8px; color: var(--yellow); }
+
+.plan-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.plan-pill { font-family: var(--font-pixel); font-size: 8px; padding: 6px 9px; border: 2px solid var(--panel-border); }
+.plan-pill.wait { color: var(--yellow); border-color: var(--yellow); }
+.plan-pill.ok { color: var(--green); border-color: var(--green); }
+.plan-pill.off { color: var(--muted); }
+
+.plan-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.plan-card { border: 3px solid var(--panel-border); background: var(--bg2); padding: 10px 12px; min-width: 0; }
+.plan-card.buy { border-left: 6px solid var(--green); }
+.plan-card.sell { border-left: 6px solid var(--red); }
+.plan-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan-card-top b { color: var(--cyan); font-family: var(--font-pixel); font-size: 12px; }
+.plan-live { margin-left: auto; display: flex; align-items: center; gap: 5px; font-family: var(--font-pixel); font-size: 7px; color: var(--yellow); }
+.plan-cond { font-family: var(--font-term); font-size: 18px; color: var(--text); margin-top: 6px; }
+.plan-meta { font-family: var(--font-term); font-size: 15px; color: var(--muted); margin-top: 3px; }
+.plan-bar { height: 10px; background: #0a0a14; border: 2px solid var(--panel-border); margin-top: 8px; overflow: hidden; }
+.plan-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--yellow), var(--green));
+  transition: width 0.6s ease;
+  box-shadow: 0 0 8px rgba(0, 255, 157, 0.5);
+}
+.plan-done { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.plan-done-item {
+  font-family: var(--font-pixel); font-size: 7px; color: var(--green);
+  border: 2px solid var(--green); padding: 4px 6px; background: rgba(0, 255, 157, 0.08);
+}
+
 /* ---------- ¿Cómo funciona? ---------- */
 .how-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
 .how-emoji {

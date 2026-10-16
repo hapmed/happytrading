@@ -169,10 +169,23 @@ export async function userRoutes(app: FastifyInstance) {
 
   // Instrucciones/plan que la IA dejó para el worker (sin IA)
   app.get('/instructions', { preHandler: [authenticate] }, async (req) => {
-    return prisma.instruction.findMany({
+    const rows = await prisma.instruction.findMany({
       where: { userId: req.user.sub },
       orderBy: { createdAt: 'desc' },
       take: 40,
+    });
+    const live = await getLiveValuation(req.user.sub).catch(() => null);
+    const priceMap = new Map<string, number>((live?.holdings ?? []).map((h: any) => [h.currency, h.priceMxn]));
+    return rows.map((r) => {
+      const b = r.symbol.split('_')[0];
+      const price = priceMap.get(b) ?? 0;
+      const trigger = Number(r.triggerPrice);
+      let distancePct = 0;
+      if (price > 0 && trigger > 0) {
+        if (r.trigger === 'price_below') distancePct = ((price - trigger) / price) * 100;
+        else if (r.trigger === 'price_above') distancePct = ((trigger - price) / price) * 100;
+      }
+      return { ...r, priceMxn: price, distancePct: Math.max(0, distancePct) };
     });
   });
 
