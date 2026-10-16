@@ -239,8 +239,14 @@ async function planForUser(userId: string): Promise<void> {
   const volatileTop = user.volatileTop ?? 3;
   const dcaLevels = user.dcaLevels ? Math.max(1, Math.min(10, user.dcaLevels)) : 3;
   const dcaStepPct = user.dcaStepPct ? Number(user.dcaStepPct) : 2;
+  const vaultAsset = (user.vaultAsset || 'usdc').toLowerCase();
   const heldCurrencies = balances
-    .filter((b: any) => String(b.currency).toLowerCase() !== 'mxn' && Number(b.total ?? 0) > 0)
+    .filter(
+      (b: any) =>
+        String(b.currency).toLowerCase() !== 'mxn' &&
+        String(b.currency).toLowerCase() !== vaultAsset && // la bóveda no se opera
+        Number(b.total ?? 0) > 0,
+    )
     .map((b: any) => String(b.currency).toLowerCase());
   const symbols = await resolveSymbols(user.symbols, profile, client, heldCurrencies);
 
@@ -289,34 +295,88 @@ async function planForUser(userId: string): Promise<void> {
     await logEvent(userId, `Régimen: ${regime.zone} (${regime.score}/100)`, regime.zone === 'RISK_OFF' ? 'warn' : 'info');
   }
 
-  // ── Bóveda de ganancias ────────────────────────────────────────────
+  // ── Bóveda de ganancias (moneda estable) ───────────────────────────
   // El bot opera SOLO con el capital invertido (capital inicial + depósitos).
-  // Todo lo que se gane por encima queda RESERVADO en pesos, NO se reinvierte,
-  // para que sea fácil de retirar cuando quieras.
+  // La ganancia se mueve a una MONEDA ESTABLE (USDC/USDT) y NO se opera.
   const deps = await prisma.deposit.findMany({ where: { userId } });
   const netDeposits = deps.reduce(
     (s, d) => s + (d.kind === 'DEPOSIT' ? Number(d.amount) : -Number(d.amount)),
     0,
   );
   const workingCapital = (user.initialCapital ? Number(user.initialCapital) : 0) + netDeposits;
-  const cryptoValue = Math.max(0, equityMxn - mxnAvailable);
-  let profitReserve = Math.max(0, equityMxn - workingCapital);
+
+  // Valor actual de la bóveda (posiciones reservadas).
+  const reservedPositions = await prisma.position.findMany({ where: { userId, reserved: true } });
+  let vaultValue = 0;
+  for (const p of reservedPositions) {
+    try {
+      const t = await client.ticker(p.symbol);
+      vaultValue += Number(p.baseAmount) * Number(t.last ?? 0);
+    } catch {}
+  }
+
+  const tradingEquity = Math.max(0, equityMxn - vaultValue);
+  const cryptoValue = Math.max(0, tradingEquity - mxnAvailable);
+  let profitReserve = Math.max(0, tradingEquity - workingCapital);
   if (movements.withdrawn > 0) {
-    // Retiro detectado automáticamente → REINICIA la bóveda (ganancia acumulada vuelve a $0).
+    // Retiro detectado automáticamente → REINICIA la bóveda (vuelve a $0).
     profitReserve = 0;
     await prisma.user
-      .update({ where: { id: userId }, data: { vaultBasePnl: String(equityMxn - workingCapital) } })
+      .update({ where: { id: userId }, data: { vaultBasePnl: String(tradingEquity - workingCapital) } })
       .catch(() => {});
     await logEvent(userId, `🔄 Bóveda reiniciada por retiro detectado ($${movements.withdrawn.toFixed(2)})`, 'ok');
   }
-  const reservePct = equityMxn * (cashReservePct / 100);
-  // Efectivo disponible para operar, sin tocar la bóveda de ganancias.
-  let cashRemaining = Math.max(
-    0,
-    Math.min(mxnAvailable - profitReserve - reservePct, workingCapital - cryptoValue),
-  );
-  if (profitReserve > 0.5) {
-    await logEvent(userId, `💰 Ganancias acumuladas: $${profitReserve.toFixed(2)} MXN (reservadas, no se reinvierten)`, 'info');
+
+  // Mueve la ganancia a la moneda estable de la bóveda (no se opera).
+  const cashReserveAmount = equityMxn * (cashReservePct / 100);
+  if (user.vaultEnabled && profitReserve >= 10) {
+    const vsym = `${vaultAsset}_mxn`;
+    const lim = limits.get(vsym);
+    const minVal = Math.max(1, lim?.minimumValue ?? 1);
+    let sweep = Math.min(profitReserve, mxnAvailable - cashReserveAmount);
+    if (sweep < minVal) sweep = 0;
+    if (sweep > 0) {
+      try {
+        const t = await client.ticker(vsym);
+        const price = Number(t.last ?? 0);
+        if (price > 0) {
+          const order = await client.placeOrder({ book: vsym, side: 'buy', type: 'market', minor: String(Math.round(sweep * 100) / 100) });
+          await prisma.trade.create({
+            data: {
+              userId, symbol: vsym, side: 'BUY', amount: String(Math.round(sweep * 100) / 100), price: String(price),
+              status: 'PENDING', source: 'AI', reason: 'Bóveda de ganancias (moneda estable)',
+              externalId: order?.oid ? String(order.oid) : null,
+            },
+          });
+          const qty = sweep / price;
+          const ex = await prisma.position.findUnique({ where: { userId_symbol: { userId, symbol: vsym } } });
+          const oldQty = ex ? Number(ex.baseAmount) : 0;
+          const oldCost = ex ? Number(ex.avgCostMxn) : 0;
+          const newQty = oldQty + qty;
+          const newAvg = newQty > 0 ? (oldQty * oldCost + qty * price) / newQty : price;
+          await prisma.position.upsert({
+            where: { userId_symbol: { userId, symbol: vsym } },
+            update: { baseAmount: String(newQty), avgCostMxn: String(newAvg), reserved: true },
+            create: { userId, symbol: vsym, baseAmount: String(newQty), avgCostMxn: String(newAvg), reserved: true },
+          });
+          profitReserve = Math.max(0, profitReserve - sweep);
+          await logEvent(userId, `🏦 Bóveda: moví $${sweep.toFixed(2)} de ganancia a ${vaultAsset.toUpperCase()} (no se opera)`, 'ok');
+        }
+      } catch (err) {
+        await logEvent(userId, `No se pudo mover a la bóveda: ${(err as Error).message.slice(0, 50)}`, 'warn');
+      }
+    }
+  }
+
+  const reservePct = cashReserveAmount;
+  // Efectivo disponible para operar (sin tocar la bóveda).
+  let cashRemaining = Math.max(0, Math.min(mxnAvailable - profitReserve - reservePct, workingCapital - cryptoValue));
+  if (profitReserve > 0.5 || vaultValue > 0.5) {
+    await logEvent(
+      userId,
+      `💰 Ganancias: $${profitReserve.toFixed(2)} en caja · bóveda ${vaultAsset.toUpperCase()}: $${vaultValue.toFixed(2)}`,
+      'info',
+    );
   }
 
   // ⚡ Selección VOLÁTIL: mide el movimiento (ticker) y se queda con las N más volátiles.

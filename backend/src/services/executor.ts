@@ -79,7 +79,7 @@ async function rotateToFund(
   const rotCount = Number((await kv.get(rotKey)) ?? 0);
   if (rotCount >= 4) return null;
 
-  const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 } } });
+  const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 }, reserved: false } });
   const others = positions.filter((p) => p.symbol !== excludeSymbol);
   let best: { symbol: string; qty: number; price: number; value: number; score: number } | null = null;
 
@@ -167,7 +167,7 @@ export async function runExecutorAll(): Promise<void> {
       where: { status: 'PENDING', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       orderBy: { createdAt: 'asc' },
     }),
-    prisma.position.findMany({ where: { baseAmount: { gt: 0 } } }),
+    prisma.position.findMany({ where: { baseAmount: { gt: 0 }, reserved: false } }),
   ]);
   if (!instructions.length && !positions.length) return;
 

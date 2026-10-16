@@ -27,6 +27,9 @@ export default function ProfitVault() {
   const vault = Number(data.vault ?? 0);
   const ready = Number(data.withdrawableNow ?? 0);
   const history: Point[] = data.history ?? [];
+  const asset = String(data.vaultAsset ?? 'usdc').toUpperCase();
+  const assetQty = Number(data.vaultQty ?? 0);
+  const assetValue = Number(data.vaultValue ?? 0);
 
   // Gráfica SVG (área) de la ganancia acumulada.
   const W = 620;
@@ -47,6 +50,12 @@ export default function ProfitVault() {
           <b className={vault > 0 ? 'vault-pos' : ''}>${vault.toFixed(2)}</b>
         </div>
         <div className="vault-meta">
+          <div>
+            <span className="muted">BÓVEDA ({asset})</span>
+            <b>
+              {assetQty.toFixed(2)} {asset} · ${assetValue.toFixed(2)}
+            </b>
+          </div>
           <div>
             <span className="muted">PUEDES RETIRAR AHORA</span>
             <b>${ready.toFixed(2)}</b>
@@ -75,9 +84,9 @@ export default function ProfitVault() {
 
       <div className="vault-foot">
         <div className="vault-help">
-          Las ganancias se <b>quedan en pesos</b> dentro de Bitso (el bot <b>no las reinvierte</b>). Retíralas cuando
-          quieras: <b>app de Bitso → Retirar → Pesos (SPEI)</b>. El retiro se <b>detecta automáticamente</b> y la
-          bóveda se <b>reinicia a $0</b> sola. ✨
+          El bot mueve las ganancias a <b>{asset}</b> (moneda estable) y <b>no las opera</b>. Para cobrar: en la app de
+          Bitso <b>vende {asset} → pesos</b> y retira por SPEI (o envía la {asset} a tu cuenta). El retiro se{' '}
+          <b>detecta automáticamente</b> y la bóveda se <b>reinicia a $0</b>. ✨
         </div>
       </div>
     </Panel>

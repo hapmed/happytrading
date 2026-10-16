@@ -350,12 +350,19 @@ export async function userRoutes(app: FastifyInstance) {
 
     let currentValue = 0;
     let availableMxn = 0;
+    let holdings: any[] = [];
     try {
       const live = await getLiveValuation(req.user.sub);
       currentValue = live.currentValue;
-      const mxnHolding = (live.holdings ?? []).find((h: any) => String(h.currency).toLowerCase() === 'mxn');
+      holdings = live.holdings ?? [];
+      const mxnHolding = holdings.find((h: any) => String(h.currency).toLowerCase() === 'mxn');
       availableMxn = mxnHolding ? Number(mxnHolding.valueMxn) : 0;
     } catch {}
+
+    const vaultAsset = (user?.vaultAsset || 'usdc').toLowerCase();
+    const vh = holdings.find((h: any) => String(h.currency).toLowerCase() === vaultAsset);
+    const vaultQty = vh ? Number(vh.amount) : 0;
+    const vaultValue = vh ? Number(vh.valueMxn) : 0;
 
     const pnl = currentValue - invested;
     const vault = Math.max(0, pnl - basePnl);
@@ -378,6 +385,9 @@ export async function userRoutes(app: FastifyInstance) {
       invested,
       currentValue,
       availableMxn,
+      vaultAsset,
+      vaultQty,
+      vaultValue,
       // Puedes retirar hasta la bóveda (o lo que haya en caja, lo que sea menor).
       withdrawableNow: Math.max(0, Math.min(vault, availableMxn)),
       history,
