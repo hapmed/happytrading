@@ -758,12 +758,14 @@ async function planForUser(userId: string): Promise<void> {
         const per = spend / levels;
         const expires = new Date(Date.now() + PLAN_TTL_H * 3600 * 1000);
         // Niveles por operación: usa los de la IA si son coherentes; si no, los del usuario.
-        const sl = signal.stopLossPrice > 0 && signal.stopLossPrice < entry
-          ? signal.stopLossPrice
-          : stopLossPct > 0 ? entry * (1 - stopLossPct / 100) : 0;
-        const tp = signal.takeProfitPrice > 0 && signal.takeProfitPrice > entry
-          ? signal.takeProfitPrice
-          : takeProfitPct > 0 ? entry * (1 + takeProfitPct / 100) : 0;
+        // Niveles por operación: MANDA la configuración del usuario (TP corto para
+        // capturar la fluctuación); si no hay, usa los que propuso la IA.
+        const sl = stopLossPct > 0
+          ? entry * (1 - stopLossPct / 100)
+          : signal.stopLossPrice > 0 && signal.stopLossPrice < entry ? signal.stopLossPrice : 0;
+        const tp = takeProfitPct > 0
+          ? entry * (1 + takeProfitPct / 100)
+          : signal.takeProfitPrice > 0 && signal.takeProfitPrice > entry ? signal.takeProfitPrice : 0;
         for (let i = 0; i < levels; i++) {
           const price = entry * (1 - (i * dcaStepPct) / 100);
           // Nivel 1: entra YA (mercado) para no perder la fluctuación; el resto espera el dip.
