@@ -8,6 +8,7 @@ export interface BookLimits {
   maximumAmount: number;
   maximumValue: number;
   tickSize: number;
+  stepSize: number; // paso de la cantidad (decimales permitidos)
 }
 
 /** Acepta la respuesta de Bitso (snake_case) o de Binance (camelCase). */
@@ -33,6 +34,7 @@ export async function getBookLimits(
     maximumAmount: Number(b.maximumAmount ?? b.maximum_amount ?? 0),
     maximumValue: Number(b.maximumValue ?? b.maximum_value ?? 0),
     tickSize: Number(b.tickSize ?? b.tick_size ?? 0),
+    stepSize: Number(b.stepSize ?? b.step_size ?? 0),
   }));
 
   try {

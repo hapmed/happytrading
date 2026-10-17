@@ -12,6 +12,7 @@ import { getRegime } from '../services/regime.js';
 import { getUsage, getLimits, getOpenRouterQuota } from '../lib/usage.js';
 import { getIndicators } from '../lib/indicators.js';
 import { makeExchangeClient, hasExchangeCreds } from '../lib/exchange.js';
+import { floorToStep, qtyStr } from '../lib/precision.js';
 
 // Monedas del termómetro de mercado (pares contra MXN).
 const THERMO_COINS = [
@@ -374,20 +375,22 @@ export async function userRoutes(app: FastifyInstance) {
         const t = await client.ticker(p.symbol);
         const price = Number(t.last ?? 0);
         const lim = limits.get(p.symbol);
-        if (lim && (qty < lim.minimumAmount || qty * price < lim.minimumValue)) {
+        const step = lim?.stepSize ?? 0;
+        const sellQty = floorToStep(qty, step); // respeta los decimales del par
+        if (lim && (sellQty < lim.minimumAmount || sellQty * price < lim.minimumValue)) {
           results.push({ symbol: p.symbol, skipped: 'bajo el mínimo del exchange' });
           continue;
         }
-        const order = await client.placeOrder({ book: p.symbol, side: 'sell', type: 'market', major: String(qty) });
+        const order = await client.placeOrder({ book: p.symbol, side: 'sell', type: 'market', major: qtyStr(sellQty, step) });
         await prisma.trade.create({
           data: {
-            userId: user.id, symbol: p.symbol, side: 'SELL', amount: String(qty), price: String(price),
+            userId: user.id, symbol: p.symbol, side: 'SELL', amount: qtyStr(sellQty, step), price: String(price),
             status: 'PENDING', source: 'AI', reason: 'Vaciar a la bóveda',
             externalId: order?.oid ? String(order.oid) : null,
           },
         });
         await prisma.position.update({ where: { id: p.id }, data: { baseAmount: '0' } });
-        results.push({ symbol: p.symbol, sold: qty });
+        results.push({ symbol: p.symbol, sold: sellQty });
       } catch (err: any) {
         results.push({ symbol: p.symbol, error: String(err.message).slice(0, 90) });
       }

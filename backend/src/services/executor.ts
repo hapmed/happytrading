@@ -4,6 +4,7 @@ import { queueNotification } from '../lib/notify.js';
 import { logEvent } from '../lib/activity.js';
 import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
 import { makeExchangeClient, quoteOf, type ExchangeClient } from '../lib/exchange.js';
+import { floorToStep, qtyStr } from '../lib/precision.js';
 
 function roundStr(n: number, dp: number): string {
   if (!isFinite(n) || n <= 0) return '0';
@@ -109,15 +110,17 @@ async function rotateToFund(
     // si no, vender la posición completa.
     const price = best.price;
     const lim = limits.get(best.symbol);
-    let sellQty = needMxn > 0 && price > 0 ? Math.min(best.qty, (needMxn / price) * 1.05) : best.qty;
+    const step = lim?.stepSize ?? 0;
+    let sellQty = floorToStep(needMxn > 0 && price > 0 ? Math.min(best.qty, (needMxn / price) * 1.05) : best.qty, step);
     if (lim && (sellQty < lim.minimumAmount || sellQty * price < lim.minimumValue)) {
-      if (best.qty >= lim.minimumAmount && best.qty * price >= lim.minimumValue) sellQty = best.qty;
+      const full = floorToStep(best.qty, step);
+      if (full >= lim.minimumAmount && full * price >= lim.minimumValue) sellQty = full;
       else return null;
     }
-    const placed = await client.placeOrder({ book: best.symbol, side: 'sell', type: 'market', major: roundStr(sellQty, 8) });
+    const placed = await client.placeOrder({ book: best.symbol, side: 'sell', type: 'market', major: qtyStr(sellQty, step) });
     await prisma.trade.create({
       data: {
-        userId, symbol: best.symbol, side: 'SELL', amount: roundStr(sellQty, 8), price: String(best.price),
+        userId, symbol: best.symbol, side: 'SELL', amount: qtyStr(sellQty, step), price: String(best.price),
         status: 'PENDING', source: 'AI', reason: 'Rotar para fondear compra', externalId: placed?.oid ? String(placed.oid) : null,
       },
     });
@@ -320,8 +323,10 @@ export async function runExecutorAll(): Promise<void> {
       } else {
         // Vender: capar por el saldo REAL disponible (la posición puede ir desfasada por comisiones).
         const real = availOf(ins.userId, ins.symbol);
-        const qty = Math.min(Number(ins.quantity ?? 0), real * 0.999);
         const lim = limits.get(ins.symbol);
+        const step = lim?.stepSize ?? 0;
+        // Ajustar al stepSize del par (si no, Binance rechaza: "too much precision").
+        const qty = floorToStep(Math.min(Number(ins.quantity ?? 0), real * 0.999), step);
         const belowMin = lim && (qty < lim.minimumAmount || qty * price < lim.minimumValue);
         if (qty <= 0 || belowMin) {
           await logEvent(user.id, `Plan cancelado ${ins.symbol}: cantidad bajo el mínimo o sin saldo`, 'info');
@@ -329,10 +334,10 @@ export async function runExecutorAll(): Promise<void> {
           continue;
         }
         await logEvent(user.id, `⚙ Worker: SELL ${ins.symbol} @ ${price}`, 'ok');
-        const placed = await client.placeOrder({ book: ins.symbol, side: 'sell', type: 'market', major: roundStr(qty, 8) });
+        const placed = await client.placeOrder({ book: ins.symbol, side: 'sell', type: 'market', major: qtyStr(qty, step) });
         const trade = await prisma.trade.create({
           data: {
-            userId: user.id, symbol: ins.symbol, side: 'SELL', amount: roundStr(qty, 8), price: String(price),
+            userId: user.id, symbol: ins.symbol, side: 'SELL', amount: qtyStr(qty, step), price: String(price),
             status: 'PENDING', source: 'AI', reason: ins.reason ?? null, externalId: placed?.oid ? String(placed.oid) : null,
           },
         });
@@ -404,8 +409,10 @@ export async function runExecutorAll(): Promise<void> {
     const client = clients.get(user.id)!;
     // Capar por el saldo REAL (la posición puede ir desfasada por comisiones).
     const realAvail = availOf(user.id, pos.symbol);
-    const qty = Math.min(Number(pos.baseAmount), realAvail * 0.999);
     const limP = limits.get(pos.symbol);
+    const stepP = limP?.stepSize ?? 0;
+    // Ajustar al stepSize del par (si no, Binance rechaza: "too much precision").
+    const qty = floorToStep(Math.min(Number(pos.baseAmount), realAvail * 0.999), stepP);
     if (qty <= 0 || (limP && (qty < limP.minimumAmount || qty * price < limP.minimumValue))) {
       await logEvent(user.id, `SL/TP ${pos.symbol} no ejecutable: bajo el mínimo o sin saldo`, 'info');
       continue;
@@ -417,10 +424,10 @@ export async function runExecutorAll(): Promise<void> {
           ? `Take-profit +${changePct.toFixed(1)}%`
           : `Take-profit trailing +${changePct.toFixed(2)}% (pico +${peakPct.toFixed(2)}%)`;
       await logEvent(user.id, `⚙ Worker: SELL ${pos.symbol} · ${reason}`, 'warn');
-      const placed = await client.placeOrder({ book: pos.symbol, side: 'sell', type: 'market', major: roundStr(qty, 8) });
+      const placed = await client.placeOrder({ book: pos.symbol, side: 'sell', type: 'market', major: qtyStr(qty, stepP) });
       const trade = await prisma.trade.create({
         data: {
-          userId: user.id, symbol: pos.symbol, side: 'SELL', amount: roundStr(qty, 8), price: String(price),
+          userId: user.id, symbol: pos.symbol, side: 'SELL', amount: qtyStr(qty, stepP), price: String(price),
           status: 'PENDING', source: 'AI', reason, externalId: placed?.oid ? String(placed.oid) : null,
         },
       });

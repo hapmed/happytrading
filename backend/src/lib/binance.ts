@@ -167,10 +167,10 @@ export class BinanceClient {
     };
   }
 
-  // ── Libros disponibles (contra MXN) y sus mínimos ─────────────────
-  async availableBooks(): Promise<Array<{ book: string; minimumAmount: number; minimumValue: number; tickSize: number }>> {
+  // ── Libros disponibles y sus mínimos ─────────────────────────────
+  async availableBooks(): Promise<Array<{ book: string; minimumAmount: number; minimumValue: number; tickSize: number; stepSize: number }>> {
     const d = await this.request<any>('GET', '/api/v3/exchangeInfo', { permissions: 'SPOT' });
-    const out: Array<{ book: string; minimumAmount: number; minimumValue: number; tickSize: number }> = [];
+    const out: Array<{ book: string; minimumAmount: number; minimumValue: number; tickSize: number; stepSize: number }> = [];
     for (const s of d.symbols ?? []) {
       if (s.status !== 'TRADING') continue;
       if (String(s.quoteAsset).toUpperCase() !== this.quote.toUpperCase()) continue;
@@ -182,6 +182,7 @@ export class BinanceClient {
         minimumAmount: Number(lot.minQty ?? 0),
         minimumValue: Number(notional.minNotional ?? 0),
         tickSize: Number(price.tickSize ?? 0),
+        stepSize: Number(lot.stepSize ?? 0),
       });
     }
     return out;
