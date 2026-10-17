@@ -93,26 +93,6 @@ export default function BotActivity() {
         </div>
       </div>
 
-      <div className={`act-stage ${botWorking ? 'busy' : ''}`}>
-        <img
-          className={`clawd ${botWorking ? 'busy' : ''}`}
-          src="/clawd.gif"
-          alt="Clawd (Claude Code)"
-          width={140}
-          height={140}
-        />
-        <div className="act-eq">
-          {Array.from({ length: 11 }).map((_, i) => (
-            <span key={i} style={{ animationDelay: `${i * 0.1}s` }} />
-          ))}
-        </div>
-        <div className="act-msg">
-          {STATE_LABEL[state] ?? state}
-          {data?.symbol ? ` · ${data.symbol}` : ''}
-          <span className="cursor" />
-        </div>
-      </div>
-
       <div className="console" ref={consoleRef}>
         {events.length === 0 && (
           <div className="console-line muted">

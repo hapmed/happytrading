@@ -57,7 +57,6 @@ export default function Dashboard() {
         <h2 style={{ fontFamily: 'var(--font-pixel)', fontSize: 14 }} className="floaty grad-text">
           BIENVENIDO, {user?.name || user?.username || user?.email}
         </h2>
-        <span className="floaty" style={{ fontSize: 26 }}>🦀</span>
       </div>
 
       {error && <div className="error-msg">{error}</div>}
