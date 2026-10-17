@@ -779,9 +779,11 @@ async function planForUser(userId: string): Promise<void> {
           `🧮 ${symbol}: EV +${evPct.toFixed(2)}% · p=${(pWin * 100).toFixed(0)}% · Kelly ${(kelly * 100).toFixed(0)}% · spread ${spreadPPct.toFixed(2)}% → COMPRO`,
           'ok',
         );
-        // SIZING AGRESIVO: usar todo el margen disponible (hasta maxOrder).
-        const size = maxOrder;
-        let spend = Math.min(maxOrder, cashRemaining);
+        // SIZING: maxOrder es el TECHO; la IA puede pedir menos (size 0.2..1).
+        // Si no lo manda, se usa el techo completo.
+        const sizeFactor = signal.size && signal.size > 0 ? Math.max(0.2, Math.min(1, signal.size)) : 1;
+        const size = maxOrder * sizeFactor;
+        let spend = Math.min(size, cashRemaining);
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
 
         // Respetar mínimos del exchange (monto y valor por orden) antes de crear el plan

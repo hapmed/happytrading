@@ -15,6 +15,8 @@ export interface MarketSignal {
   entryPrice?: number;
   takeProfitPrice?: number;
   stopLossPrice?: number;
+  /** Fracción del tamaño máximo que conviene invertir (0.2..1). El máximo es el techo. */
+  size?: number;
 }
 
 export interface MarketContext {
@@ -227,7 +229,8 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
     `SEÑALES_PREVIAS=${recent}`,
     criteria,
     `REGLAS: entry dentro de ±1% del mercado actual; takeProfit por ENCIMA de entry y stopLoss por DEBAJO (para BUY); relación ganancia/riesgo >= 1.2; no inventes precios ni datos.`,
-    `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=60 chars","entry":0,"takeProfit":0,"stopLoss":0}`,
+    `TAMAÑO: "size" es la fracción del MÁXIMO que conviene invertir (0.2 = poquito, 1.0 = todo el máximo permitido). Usa MENOS cuando la ventaja no sea clara o el activo sea muy riesgoso; usa 1.0 solo con oportunidad clara.`,
+    `Responde SOLO JSON: {"action":"BUY"|"SELL"|"HOLD","confidence":0.0-1.0,"reasoning":"<=60 chars","size":0.2-1.0,"entry":0,"takeProfit":0,"stopLoss":0}`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -262,6 +265,7 @@ function parseSignal(symbol: string, text: string, tokensUsed: number, latencyMs
     entryPrice: Number(parsed.entry) > 0 ? Number(parsed.entry) : 0,
     takeProfitPrice: Number(parsed.takeProfit) > 0 ? Number(parsed.takeProfit) : 0,
     stopLossPrice: Number(parsed.stopLoss) > 0 ? Number(parsed.stopLoss) : 0,
+    size: Math.min(1, Math.max(0, Number(parsed.size) || 0)),
   };
 }
 

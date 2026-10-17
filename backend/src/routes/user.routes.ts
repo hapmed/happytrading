@@ -616,7 +616,13 @@ export async function userRoutes(app: FastifyInstance) {
             const r = await client.dustConvert([a]);
             results.push({ asset: a, ok: true, via: 'dust→BNB', detail: `convertida · comisión ${r?.totalServiceCharge ?? '?'}` });
           } catch (e2: any) {
-            results.push({ asset: a, ok: false, via: 'dust→BNB', detail: String(e2?.message ?? 'dust falló').slice(0, 90) });
+            // Último recurso: convertir el polvo a BTC (a veces acepta lo que el de BNB rechaza).
+            try {
+              const r2 = await client.dustConvertBtc([a]);
+              results.push({ asset: a, ok: true, via: 'dust→BTC', detail: `convertida · ${r2?.totalTransfered ?? 'ok'}` });
+            } catch (e3: any) {
+              results.push({ asset: a, ok: false, via: 'dust', detail: String(e3?.message ?? 'dust falló').slice(0, 90) });
+            }
           }
         }
       }
