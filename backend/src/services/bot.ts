@@ -277,6 +277,13 @@ async function planForUser(userId: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.tradingEnabled || !hasExchangeCreds(user)) return;
 
+  // ⏸ Si el automático está apagado, el bot se DETIENE (no gasta tokens ni opera).
+  if (!user.autoTrade) {
+    await logEvent(userId, '⏸ Bot detenido: el automático está APAGADO (enciéndelo para operar)', 'warn');
+    await setState(userId, 'idle', 'Detenido · automático OFF');
+    return;
+  }
+
   const client = await makeExchangeClient(user);
   if (!client) {
     await logEvent(userId, 'Faltan credenciales del exchange configurado', 'warn');

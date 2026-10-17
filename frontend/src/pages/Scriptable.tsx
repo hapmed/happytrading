@@ -45,7 +45,7 @@ export default function Scriptable() {
       </div>
 
       <Panel title="◈ ¿QUÉ ES?">
-        <div className="how-step">Un <b>widget</b> en tu iPhone/iPad que muestra tu <b>ganancia o pérdida</b> en vivo, con el <b>lobo</b> y una frase. 🔥</div>
+        <div className="how-step">Un <b>widget</b> en tu iPhone/iPad que muestra tu <b>ganancia o pérdida</b> en vivo, con <b>Clawd</b> y una frase. 🔥</div>
         <div className="how-step">Se hace con la app <b>Scriptable</b> (gratis). Copia el código de abajo y listo.</div>
         <div className="how-step muted">Se actualiza solo (iOS lo refresca periódicamente) usando un token único tuyo.</div>
       </Panel>

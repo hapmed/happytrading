@@ -86,7 +86,7 @@ function Chart({ data, baseline }: { data: { t: string; v: number }[]; baseline:
   );
 }
 
-export default function Portfolio() {
+export default function Portfolio({ simple = false }: { simple?: boolean }) {
   const [data, setData] = useState<any>(null);
   const [rain, setRain] = useState(0);
   const [flash, setFlash] = useState('');
@@ -141,8 +141,8 @@ export default function Portfolio() {
           <span className="live-dot" /> EN VIVO · PRECIOS AL MOMENTO
         </div>
         <div className={`pnl-hero ${gain ? 'gain' : 'loss'}`}>
-          <div className="pnl-wolf">
-            <img src="/wolf.png" alt="El Lobo" className="wolf-img" />
+          <div className="pnl-mascot">
+            <img src="/clawd.gif" alt="Clawd" className="mascot-img" />
           </div>
           <div className="pnl-info">
             <div className="pnl-label">{gain ? '▲ GANANCIA TOTAL' : '▼ PÉRDIDA TOTAL'}</div>
@@ -175,22 +175,26 @@ export default function Portfolio() {
         )}
       </Panel>
 
-      <Panel title="◈ VALOR DEL PORTAFOLIO (MXN)">
-        <Chart data={history} baseline={invested} />
-        {invested > 0 && (
-          <div className="muted center" style={{ marginTop: 6, fontFamily: 'var(--font-pixel)', fontSize: 8 }}>
-            ─ ─ LÍNEA AMARILLA = TU INVERSIÓN INICIAL
-          </div>
-        )}
-      </Panel>
+      {!simple && (
+        <>
+          <Panel title="◈ VALOR DEL PORTAFOLIO (MXN)">
+            <Chart data={history} baseline={invested} />
+            {invested > 0 && (
+              <div className="muted center" style={{ marginTop: 6, fontFamily: 'var(--font-pixel)', fontSize: 8 }}>
+                ─ ─ LÍNEA AMARILLA = TU INVERSIÓN INICIAL
+              </div>
+            )}
+          </Panel>
 
-      <Panel title="◈ TUS CRIPTOS">
-        {holdings.length === 0 ? (
-          <div className="muted center">Aún sin datos de portafolio.</div>
-        ) : (
-          <Donut holdings={holdings} total={current} />
-        )}
-      </Panel>
+          <Panel title="◈ TUS CRIPTOS">
+            {holdings.length === 0 ? (
+              <div className="muted center">Aún sin datos de portafolio.</div>
+            ) : (
+              <Donut holdings={holdings} total={current} />
+            )}
+          </Panel>
+        </>
+      )}
     </>
   );
 }

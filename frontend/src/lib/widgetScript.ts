@@ -5,7 +5,7 @@ export function buildWidgetScript(base: string, token: string): string {
 // 2) En Scriptable: + (nuevo script) -> pega TODO esto -> nombre: "HappyTrading"
 // 3) Pantalla de inicio: deja pulsado -> + -> Scriptable -> elige el tamano (Small/Medium/Large)
 //    -> edita el widget -> Script: HappyTrading
-// El widget se adapta: SMALL = lobo + %  ·  MEDIUM = + monto + frase  ·  LARGE = todo el detalle
+// El widget se adapta: SMALL = Clawd + %  ·  MEDIUM = + monto + frase  ·  LARGE = todo el detalle
 
 const BASE = "__BASE__";
 const TOKEN = "__TOKEN__";
@@ -28,9 +28,10 @@ async function getData() {
     return await r.loadJSON();
   } catch (e) { return null; }
 }
-async function getWolf() {
+async function getMascot() {
   try {
-    const r = new Request(BASE + "/wolf.png");
+    // Clawd (mascota de Claude Code). El widget no anima GIFs: se ve su primer cuadro.
+    const r = new Request(BASE + "/clawd.gif");
     return await r.loadImage();
   } catch (e) { return null; }
 }
@@ -43,13 +44,13 @@ function baseWidget() {
   return w;
 }
 
-async function makeSmall(d, gain, wolf) {
+async function makeSmall(d, gain, mascot) {
   const w = baseWidget();
   w.addSpacer();
   const col = w.addStack();
   col.layoutVertically();
   col.centerAlignContent();
-  if (wolf) { const im = col.addImage(wolf); im.imageSize = new Size(82, 98); }
+  if (mascot) { const im = col.addImage(mascot); im.imageSize = new Size(78, 78); }
   col.addSpacer(4);
   const p = col.addText(pct(d.pnlPct));
   p.font = Font.boldMonospacedSystemFont(20);
@@ -67,28 +68,28 @@ async function makeSmall(d, gain, wolf) {
   return w;
 }
 
-async function makeMedium(d, gain, wolf, mood) {
+async function makeMedium(d, gain, mascot, mood) {
   const w = baseWidget();
   const row = w.addStack();
   row.layoutHorizontally();
   row.centerAlignContent();
   const left = row.addStack();
   left.layoutVertically();
-  const t = left.addText("HAPPYTRADING 🐺"); t.font = Font.boldSystemFont(9); t.textColor = new Color("#00ff9d");
+  const t = left.addText("HAPPYTRADING 🦀"); t.font = Font.boldSystemFont(9); t.textColor = new Color("#00ff9d");
   const lbl = left.addText(gain ? "▲ GANANCIA" : "▼ PÉRDIDA"); lbl.font = Font.systemFont(8); lbl.textColor = new Color("#7984a6");
   const big = left.addText((gain ? "+" : "-") + money(d.pnl)); big.font = Font.boldMonospacedSystemFont(22); big.textColor = new Color(gain ? "#00ff9d" : "#ff4d4d"); big.lineLimit = 1; big.minimumScaleFactor = 0.5;
   const sub = left.addText(pct(d.pnlPct) + "  ·  " + (gain ? "+" : "-") + money(d.pnl) + "  ·  " + money(d.currentValue)); sub.font = Font.systemFont(8); sub.textColor = new Color("#00e5ff"); sub.lineLimit = 1;
   const ph = left.addText("“" + pick(mood) + "”"); ph.font = Font.systemFont(8); ph.textColor = new Color("#ffe600"); ph.lineLimit = 2;
   row.addSpacer(6);
-  if (wolf) { const im = row.addImage(wolf); im.imageSize = new Size(58, 70); }
+  if (mascot) { const im = row.addImage(mascot); im.imageSize = new Size(56, 56); }
   return w;
 }
 
-async function makeLarge(d, gain, wolf, mood) {
+async function makeLarge(d, gain, mascot, mood) {
   const w = baseWidget();
-  const t = w.addText("HAPPYTRADING 🐺"); t.font = Font.boldSystemFont(12); t.textColor = new Color("#00ff9d"); t.centerAlignText();
+  const t = w.addText("HAPPYTRADING 🦀"); t.font = Font.boldSystemFont(12); t.textColor = new Color("#00ff9d"); t.centerAlignText();
   w.addSpacer(6);
-  if (wolf) { const im = w.addImage(wolf); im.imageSize = new Size(128, 154); im.centerAlignImage(); }
+  if (mascot) { const im = w.addImage(mascot); im.imageSize = new Size(118, 118); im.centerAlignImage(); }
   w.addSpacer(8);
   const lbl = w.addText(gain ? "▲ GANANCIA TOTAL" : "▼ PÉRDIDA TOTAL"); lbl.font = Font.systemFont(10); lbl.textColor = new Color("#7984a6"); lbl.centerAlignText();
   const big = w.addText((gain ? "+" : "-") + money(d.pnl)); big.font = Font.boldMonospacedSystemFont(34); big.textColor = new Color(gain ? "#00ff9d" : "#ff4d4d"); big.centerAlignText(); big.lineLimit = 1; big.minimumScaleFactor = 0.4;
@@ -109,10 +110,10 @@ async function make(family) {
   const d = (await getData()) || {};
   const mood = d.mood || "idle";
   const gain = Number(d.pnl) >= 0;
-  const wolf = await getWolf();
-  if (family === "small") return await makeSmall(d, gain, wolf);
-  if (family === "large") return await makeLarge(d, gain, wolf, mood);
-  return await makeMedium(d, gain, wolf, mood);
+  const mascot = await getMascot();
+  if (family === "small") return await makeSmall(d, gain, mascot);
+  if (family === "large") return await makeLarge(d, gain, mascot, mood);
+  return await makeMedium(d, gain, mascot, mood);
 }
 
 const fam = config.widgetFamily;

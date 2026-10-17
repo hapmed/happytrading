@@ -157,7 +157,7 @@ async function rotateToFund(
  * Corre seguido (p. ej. cada 20-30s) y es barato.
  */
 export async function runExecutorAll(): Promise<void> {
-  const users0 = await prisma.user.findMany({ where: { tradingEnabled: true } });
+  const users0 = await prisma.user.findMany({ where: { tradingEnabled: true, autoTrade: true } });
   // Construye el cliente de Binance de cada usuario.
   const clients = new Map<string, ExchangeClient>();
   const users: typeof users0 = [];

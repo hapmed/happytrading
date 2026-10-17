@@ -33,7 +33,12 @@ async function getIntervalMs(): Promise<number> {
 
 async function tick(): Promise<void> {
   const users = await prisma.user.findMany({
-    where: { bitsoApiKey: { not: null }, bitsoApiSecret: { not: null }, tradingEnabled: true },
+    where: {
+      bitsoApiKey: { not: null },
+      bitsoApiSecret: { not: null },
+      tradingEnabled: true,
+      autoTrade: true, // ⏸ Si el automático está APAGADO, el bot no corre.
+    },
   });
   console.log(`[worker] Pasada: ${users.length} usuario(s) activo(s)`);
   await heartbeat().catch(() => {});
