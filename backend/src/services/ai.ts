@@ -203,16 +203,21 @@ function buildPrompt(symbol: string, ctx: MarketContext): string {
   const regimeLine = ctx.regime ? `régimen_mercado=${ctx.regime.zone} (${ctx.regime.score}/100)` : '';
 
   const criteria = ctx.aggressive
-    ? `ESTRATEGIA (REVERSIÓN A LA MEDIA — comprar barato, vender caro):
-- COMPRA cuando el activo esté BARATO: veredicto=BARATO, o zScore <= -1, o RSI < 35, o pos_bandas <= 20 (cerca de la banda inferior). Cuanto más barato, mayor confidence.
+    ? `ESTRATEGIA (CORTO PLAZO · reversión a la media · comprar barato y vender caro):
+- Operas en RÁFAGAS CORTAS: entras y sales en minutos u horas. No te "casas" con ninguna moneda.
+- TÚ NO EJECUTAS las órdenes: dejas el PLAN (entry/takeProfit/stopLoss) y un WORKER automático
+  lo ejecuta cada ~30 segundos, 24/7, con trailing y stop-loss incluidos. CONFÍA en él.
+- Por eso tus niveles deben ser PRECISOS y REALISTAS (±1% del mercado actual).
+- COMPRA cuando esté BARATO: veredicto=BARATO, zScore <= -1, RSI < 35, pos_bandas <= 20. Más barato → más confidence.
 - NO compres si está CARO (zScore >= 1.5, RSI > 70, pos_bandas >= 85), salvo tendencia claramente alcista.
-- VENDE para tomar ganancia cuando vuelva a la media o esté CARO: zScore >= -0.2, RSI > 58, pos_bandas >= 60, o si el PnL ya supera tu objetivo.
-- VENDE también para cortar pérdida si el precio cae por debajo del stopLoss.
-- Si está NEUTRO y sin ventaja clara, responde HOLD.`
+- La ganancia chica VALE (el worker la cobra con trailing); una pérdida NUNCA se deja correr.
+- Si ya tienes posición y el activo se puso CARO, responde SELL para cerrarla tú.
+- Si está NEUTRO y sin ventaja clara, responde HOLD (no gastes la jugada).`
     : `ESTRATEGIA (REVERSIÓN): compra cuando el activo esté claramente BARATO (veredicto=BARATO, zScore<=-1, RSI<35); vende cuando esté CARO o al alcanzar tu objetivo. Si no hay ventaja clara, HOLD.`;
 
   return [
-    `Eres un trader cuantitativo de cripto: compras BARATO y vendes CARO (reversión a la media asistida por estadística). Objetivo: ganar dinero de forma consistente, aunque la ganancia por operación sea pequeña. Nunca dejar correr una pérdida.`,
+    `Eres un trader cuantitativo de cripto de CORTO PLAZO: compras BARATO y vendes CARO (reversión a la media asistida por estadística). Entras y sales rápido. Objetivo: ganar dinero de forma consistente, aunque la ganancia por operación sea pequeña. Nunca dejar correr una pérdida.`,
+    `TU ROL: eres el CEREBRO. No colocas órdenes: dejas INSTRUCCIONES (entry, takeProfit, stopLoss) a un WORKER automático que las vigila y ejecuta cada ~30 segundos, los 365 días. Él se encarga del cierre (TP, trailing y stop-loss). Por eso tus niveles deben ser claros y ejecutables YA.`,
     `PAR: ${symbol}`,
     `PRECIO: last=${t?.last ?? '-'} bid=${t?.bid ?? '-'} ask=${t?.ask ?? '-'} spread=${spreadPct.toFixed(2)}% vol24h=${t?.volume ?? '-'} (24h high=${t?.high ?? '-'} low=${t?.low ?? '-'})`,
     `ESTADÍSTICA: ${indLine}`,

@@ -25,7 +25,7 @@ const SYMBOLS: Record<string, string[]> = {
 };
 const MIN_CONF: Record<string, number> = { conservative: 0.7, balanced: 0.55, aggressive: 0.3 };
 const DEFAULT_ORDER_MXN = 200;
-const PLAN_TTL_H = 8; // validez de cada instrucción
+const PLAN_TTL_H = 2; // validez de cada instrucción (corto plazo: si no entra en 2h, caduca)
 
 function uniq<T>(arr: T[]): T[] {
   return [...new Set(arr)];
@@ -324,11 +324,20 @@ async function planForUser(userId: string): Promise<void> {
   // (si no, la app no los ve y el bot no los puede usar).
   try {
     const fut = await (client as any).futuresBalance?.();
-    const fq = Number(fut?.find((b: any) => b.currency === quote)?.total ?? 0);
-    if (fq > 0.1) {
-      await (client as any).transfer('UMFUTURE_MAIN', quote.toUpperCase(), Number(fq.toFixed(6)));
-      await logEvent(userId, `💼 Rescaté ${fq.toFixed(4)} ${quote.toUpperCase()} de Futuros → a la bolsa de Spot`, 'info');
+    const f = fut?.find((b: any) => b.currency === quote);
+    const canMove = Number(f?.maxWithdraw ?? 0); // solo lo realmente transferible
+    const avail = Number(f?.available ?? 0);
+    const total = Number(f?.total ?? 0);
+    if (canMove > 0.1) {
+      await (client as any).transfer('UMFUTURE_MAIN', quote.toUpperCase(), Number((canMove * 0.999).toFixed(6)));
+      await logEvent(userId, `💼 Rescaté ${canMove.toFixed(4)} ${quote.toUpperCase()} de Futuros → a la bolsa de Spot`, 'info');
       balances = await client.balance();
+    } else if (total > 0.1) {
+      await logEvent(
+        userId,
+        `⚠️ Tienes ${total.toFixed(4)} ${quote.toUpperCase()} en Futuros pero NO son transferibles (disponible ${avail.toFixed(4)} · ¿hay una posición abierta?).`,
+        'warn',
+      );
     }
   } catch (err) {
     await logEvent(userId, `No pude rescatar el saldo de Futuros: ${(err as Error).message.slice(0, 90)}`, 'warn');
@@ -577,8 +586,15 @@ async function planForUser(userId: string): Promise<void> {
   }
   ranked.sort((a, b) => b.vol - a.vol);
 
+  // 📡 COBERTURA DINÁMICA: más capital → más monedas vigiladas.
+  //    La IA analiza estas; el WORKER las vigila TODAS cada ~30s con sus niveles.
+  const watched = Math.max(
+    volatileTop,
+    Math.min(20, Math.round(Math.max(0, cashRemaining) / Math.max(0.5, maxOrder)) + 3),
+  );
+
   // Selección: entre los más volátiles, PRIORIZA los que están BARATOS (estadística).
-  const pool = ranked.slice(0, Math.max(10, volatileTop * 3)).map((r) => r.symbol);
+  const pool = ranked.slice(0, Math.max(10, watched * 3)).map((r) => r.symbol);
   const cheap: string[] = [];
   for (const sym of pool) {
     try {
@@ -587,7 +603,7 @@ async function planForUser(userId: string): Promise<void> {
     } catch {}
   }
   const ordered = [...cheap, ...ranked.map((r) => r.symbol)];
-  const selected = (volatileTop > 0 ? uniq(ordered).slice(0, volatileTop + 1) : ordered);
+  const selected = (watched > 0 ? uniq(ordered).slice(0, watched + 1) : ordered);
   if (selected.length) {
     await logEvent(
       userId,
