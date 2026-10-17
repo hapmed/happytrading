@@ -330,7 +330,9 @@ async function planForUser(userId: string): Promise<void> {
       await logEvent(userId, `💼 Rescaté ${fq.toFixed(4)} ${quote.toUpperCase()} de Futuros → a la bolsa de Spot`, 'info');
       balances = await client.balance();
     }
-  } catch {}
+  } catch (err) {
+    await logEvent(userId, `No pude rescatar el saldo de Futuros: ${(err as Error).message.slice(0, 90)}`, 'warn');
+  }
 
   for (const b of balances) {
     await prisma.balanceSnapshot.create({
