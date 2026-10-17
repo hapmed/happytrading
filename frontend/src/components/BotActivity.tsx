@@ -11,46 +11,6 @@ const STATE_LABEL: Record<string, string> = {
   error: 'ERROR',
 };
 
-/**
- * "Clawd": la mascota pixel-art de Claude Code (bichito coral con ojitos,
- * brazos y 3 patas). Dibujado como sprite SVG con píxeles nítidos.
- */
-function Clawd({ busy }: { busy: boolean }) {
-  const CELL = 6;
-  const BODY = '#d97757'; // coral Claude
-  const EYE = '#1d1b19';
-  return (
-    <svg
-      className={`clawd ${busy ? 'busy' : ''}`}
-      width={18 * CELL}
-      height={12 * CELL}
-      viewBox="0 0 18 12"
-      shapeRendering="crispEdges"
-      role="img"
-      aria-label="Clawd (Claude Code)"
-    >
-      <g fill={BODY}>
-        {/* cabeza */}
-        <rect x={5} y={2} width={8} height={2} />
-        <rect x={3} y={3} width={12} height={1} />
-        {/* brazos (banda ancha) */}
-        <rect x={0} y={4} width={18} height={2} />
-        {/* cuerpo */}
-        <rect x={3} y={5} width={12} height={3} />
-        {/* patas */}
-        <rect x={3} y={8} width={2} height={3} />
-        <rect x={8} y={8} width={2} height={3} />
-        <rect x={13} y={8} width={2} height={3} />
-      </g>
-      {/* ojitos */}
-      <g fill={EYE}>
-        <rect x={5} y={4} width={2} height={2} />
-        <rect x={11} y={4} width={2} height={2} />
-      </g>
-    </svg>
-  );
-}
-
 export default function BotActivity() {
   const [data, setData] = useState<any>(null);
   const [running, setRunning] = useState(false);
@@ -134,7 +94,13 @@ export default function BotActivity() {
       </div>
 
       <div className={`act-stage ${botWorking ? 'busy' : ''}`}>
-        <Clawd busy={botWorking} />
+        <img
+          className={`clawd ${botWorking ? 'busy' : ''}`}
+          src="/clawd.gif"
+          alt="Clawd (Claude Code)"
+          width={140}
+          height={140}
+        />
         <div className="act-eq">
           {Array.from({ length: 11 }).map((_, i) => (
             <span key={i} style={{ animationDelay: `${i * 0.1}s` }} />
