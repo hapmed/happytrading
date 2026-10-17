@@ -903,6 +903,24 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // Devolver a la bolsa (Spot) lo que esté guardado en la bóveda (Funding).
+  app.post('/vault/return', { preHandler: [authenticate] }, async (req, reply) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const quote = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    try {
+      const f = await client.fundingBalance();
+      const amt = Number(f?.find((b: any) => b.currency === quote)?.available ?? 0);
+      if (amt > 0.01) {
+        await client.transfer('FUNDING_MAIN', quote.toUpperCase(), Number(amt.toFixed(6)));
+        await logEvent(req.user.sub, `↩️ Regresé ${amt.toFixed(4)} ${quote.toUpperCase()} de la bóveda a la bolsa de trabajo`, 'ok');
+      }
+      return { devuelto: amt };
+    } catch (e: any) {
+      return reply.code(400).send({ error: String(e?.message ?? e).slice(0, 150) });
+    }
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
