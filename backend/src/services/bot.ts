@@ -52,7 +52,7 @@ async function tryRotate(
   userId: string,
   excludeSymbol: string,
   client: ExchangeClient,
-  opts: { preferWorst?: boolean; needed?: number } = {},
+  opts: { preferWorst?: boolean; needed?: number; max?: number } = {},
 ): Promise<number> {
   const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 }, reserved: false } });
   const others = positions.filter((p) => p.symbol !== excludeSymbol);
@@ -82,7 +82,7 @@ async function tryRotate(
   );
 
   const needed = opts.needed && opts.needed > 0 ? opts.needed : 0;
-  const maxSell = opts.preferWorst ? 4 : 1; // imperdible: vende varias si hace falta
+  const maxSell = Math.max(1, opts.max ?? 1); // imperdible: vende varias si hace falta
   let freed = 0;
   let sold = 0;
   for (const c of cands) {
@@ -738,8 +738,9 @@ async function planForUser(userId: string): Promise<void> {
         const target = imperdible ? maxOrder : minSellable;
         if (spend < target && rotate) {
           const freedValue = await tryRotate(userId, symbol, client, {
-            preferWorst: imperdible,
+            preferWorst: true,
             needed: target - spend,
+            max: imperdible ? 4 : 1,
           });
           if (freedValue > 0) spend = Math.min(maxOrder, spend + freedValue);
         }
