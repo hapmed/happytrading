@@ -34,8 +34,8 @@ export class BinanceClient {
     return crypto.createHmac('sha256', this.secret).update(qs).digest('hex');
   }
 
-  private async request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, any> = {}, signed = false): Promise<T> {
-    const url = new URL(BASE + path);
+  private async request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, any> = {}, signed = false, host = BASE): Promise<T> {
+    const url = new URL(host + path);
     const entries: Record<string, any> = { ...params };
     if (signed) {
       entries.timestamp = Date.now();
@@ -69,6 +69,11 @@ export class BinanceClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** Consulta cruda (solo diagnóstico): permite pegarle a cualquier endpoint firmado. */
+  async raw<T>(method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, any> = {}, signed = true, host = BASE): Promise<T> {
+    return this.request<T>(method, path, params, signed, host);
   }
 
   // ── Saldos SOLO Spot (para operar) ────────────────────────────────

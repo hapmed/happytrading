@@ -824,6 +824,38 @@ export async function userRoutes(app: FastifyInstance) {
     return { cards };
   });
 
+  // DIAGNÓSTICO: revisa TODAS las carteras para cuadrar con la app de Binance.
+  app.get('/wallets', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const out: Record<string, any> = {};
+    const tryOne = async (name: string, method: any, path: string, params: any = {}, host?: string) => {
+      try {
+        out[name] = await client.raw(method, path, params, true, host);
+      } catch (e: any) {
+        out[name] = { error: String(e?.message ?? e).slice(0, 150) };
+      }
+    };
+    await tryOne('spot', 'GET', '/api/v3/account');
+    await tryOne('funding', 'POST', '/sapi/v1/asset/get-funding-asset');
+    await tryOne('earnFlexible', 'GET', '/sapi/v1/simple-earn/flexible/position', { size: 100 });
+    await tryOne('earnLocked', 'GET', '/sapi/v1/simple-earn/locked/position', { size: 100 });
+    await tryOne('margin', 'GET', '/sapi/v1/margin/account');
+    await tryOne('futures', 'GET', '/fapi/v2/balance', {}, 'https://fapi.binance.com');
+    const nz = (arr: any[], f: (x: any) => number) => (arr ?? []).filter((x) => f(x) > 0);
+    return {
+      resumen: {
+        spot: nz(out.spot?.balances ?? [], (b) => Number(b.free) + Number(b.locked)).map((b: any) => ({ a: b.asset, free: b.free, locked: b.locked })),
+        funding: nz(Array.isArray(out.funding) ? out.funding : [], (b) => Number(b.free)).map((b: any) => ({ a: b.asset, free: b.free, frozen: b.freeze })),
+        earnFlexible: (out.earnFlexible?.rows ?? []).map((b: any) => ({ a: b.asset, amt: b.totalAmount })),
+        earnLocked: (out.earnLocked?.rows ?? []).map((b: any) => ({ a: b.asset, amt: b.amount })),
+        futures: nz(Array.isArray(out.futures) ? out.futures : [], (b) => Number(b.balance)).map((b: any) => ({ a: b.asset, bal: b.balance })),
+        margin: out.margin?.error ? { error: out.margin.error } : 'ok',
+        earnLockedErr: out.earnLocked?.error ?? null,
+      },
+    };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
