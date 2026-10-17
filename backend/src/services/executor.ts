@@ -52,6 +52,10 @@ let recoveredProcessing = false;
 let accountBlockedUntil = 0;
 let accountBlockNoticeAt = 0;
 
+// La rotación la decide el PLANNER (con lógica de "oportunidad imperdible").
+// El worker sólo ejecuta; así no rota por planes viejos (evita churn y polvo).
+const EXECUTOR_ROTATION = false;
+
 /** ¿El error es un bloqueo por límites de cuenta del exchange? */
 function isAccountLimitError(err: unknown): boolean {
   const e = err as any;
@@ -88,7 +92,7 @@ async function rotateToFund(
       const t = await client.ticker(p.symbol);
       const price = Number(t.last ?? 0);
       // Capar por el saldo REAL disponible de esa moneda (evita 0379 Insufficient balance).
-      const qty = Math.min(Number(p.baseAmount), availOf(p.symbol) * 0.999);
+      const qty = Math.min(Number(p.baseAmount), availOf(p.symbol));
       const value = qty * price;
       if (value <= 0) continue;
       const lim = limits.get(p.symbol);
@@ -292,14 +296,16 @@ export async function runExecutorAll(): Promise<void> {
           continue;
         }
 
-        // ¿Alcanza el MXN? Si no, vende una posición para fondear (rota) y reintenta el próximo ciclo.
+        // ¿Alcanza el efectivo? La rotación la decide el PLANNER; el worker espera.
         const mxn = mxnMap.get(ins.userId) ?? 0;
         if (minor > mxn) {
-          const sold = await rotateToFund(ins.userId, ins.symbol, minor, client, limits, (s) => availOf(ins.userId, s));
+          const sold = EXECUTOR_ROTATION
+            ? await rotateToFund(ins.userId, ins.symbol, minor, client, limits, (s) => availOf(ins.userId, s))
+            : null;
           if (sold) {
             await logEvent(user.id, `🔄 Sin MXN ($${mxn.toFixed(2)}) → vendo ${sold} para fondear ${ins.symbol}`, 'warn');
           } else {
-            await logEvent(user.id, `Sin MXN ($${mxn.toFixed(2)}) ni posiciones para fondear ${ins.symbol}`, 'info');
+            await logEvent(user.id, `Sin fondos ($${mxn.toFixed(2)}) para ${ins.symbol} · el planner evaluará rotar`, 'info');
           }
           await release();
           continue;
@@ -326,7 +332,7 @@ export async function runExecutorAll(): Promise<void> {
         const lim = limits.get(ins.symbol);
         const step = lim?.stepSize ?? 0;
         // Ajustar al stepSize del par (si no, Binance rechaza: "too much precision").
-        const qty = floorToStep(Math.min(Number(ins.quantity ?? 0), real * 0.999), step);
+        const qty = floorToStep(Math.min(Number(ins.quantity ?? 0), real), step);
         const belowMin = lim && (qty < lim.minimumAmount || qty * price < lim.minimumValue);
         if (qty <= 0 || belowMin) {
           await logEvent(user.id, `Plan cancelado ${ins.symbol}: cantidad bajo el mínimo o sin saldo`, 'info');
@@ -412,7 +418,7 @@ export async function runExecutorAll(): Promise<void> {
     const limP = limits.get(pos.symbol);
     const stepP = limP?.stepSize ?? 0;
     // Ajustar al stepSize del par (si no, Binance rechaza: "too much precision").
-    const qty = floorToStep(Math.min(Number(pos.baseAmount), realAvail * 0.999), stepP);
+    const qty = floorToStep(Math.min(Number(pos.baseAmount), realAvail), stepP);
     if (qty <= 0 || (limP && (qty < limP.minimumAmount || qty * price < limP.minimumValue))) {
       await logEvent(user.id, `SL/TP ${pos.symbol} no ejecutable: bajo el mínimo o sin saldo`, 'info');
       continue;

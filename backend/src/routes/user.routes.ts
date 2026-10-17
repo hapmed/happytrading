@@ -370,7 +370,7 @@ export async function userRoutes(app: FastifyInstance) {
       try {
         const base = p.symbol.split('_')[0];
         const bal = balances.find((b: any) => String(b.currency).toLowerCase() === base);
-        const qty = Math.min(Number(p.baseAmount), Number(bal?.available ?? 0) * 0.999);
+        const qty = Math.min(Number(p.baseAmount), Number(bal?.available ?? 0));
         if (qty <= 0) continue;
         const t = await client.ticker(p.symbol);
         const price = Number(t.last ?? 0);
