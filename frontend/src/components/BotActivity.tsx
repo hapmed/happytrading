@@ -2,20 +2,36 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { Panel, PixelButton } from './Retro';
 
-const STATE_LABEL: Record<string, string> = {
-  idle: 'EN ESPERA',
-  reading_balance: 'LEYENDO MERCADO',
-  ai_thinking: 'IA PENSANDO',
-  placing_order: '¡OPERANDO!',
-  done: 'LISTO',
-  error: 'ERROR',
-};
+// Frases hilarantes para mientras el bot calcula / espera su próxima pasada.
+const FRASES = [
+  'El bot está afilando el lápiz para calcular 📝',
+  'Haciendo cuentas con los dedos 🧮',
+  'Consultando la bola de cristal 🔮',
+  'Oliendo gangas en el mercado 👃',
+  'Espiando a las ballenas 🐋',
+  'Soplando los dados 🎲',
+  'Decidiendo si comprar o llorar 😅',
+  'Viéndose si el mercado está de buenas o de lunes',
+  'Calentando los tubos… 🔥',
+  'Contando billetes imaginarios 💸',
+  'Preguntándole a la IA si es broma 🤖',
+  'Mirando el gráfico con un ojo cerrado 🙈',
+  'Aceitando los engranes ⚙️',
+  'Pensando en tacos mientras calcula 🌮',
+  'Haciéndose el interesante 😎',
+  'Esperando a que el mercado diga "va"',
+  'Buscando el precio de la dignidad 📉',
+  'Revisando si ya somos ricos… aún no 🫠',
+];
 
 export default function BotActivity() {
   const [data, setData] = useState<any>(null);
   const [running, setRunning] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [phrase, setPhrase] = useState('');
   const consoleRef = useRef<HTMLDivElement>(null);
+  const lastKey = useRef('');
+  const firstLoad = useRef(true);
 
   const load = () =>
     api('/me/activity')
@@ -37,8 +53,18 @@ export default function BotActivity() {
   const aiWorking = state === 'ai_thinking';
   const botWorking = ['reading_balance', 'ai_thinking', 'placing_order'].includes(state);
   const botAlive = !!data?.botAlive;
-  const events: any[] = data?.events ?? [];
+  // El log viene del más nuevo al más viejo → lo mostramos cronológico (nuevo abajo).
+  const events: any[] = [...(data?.events ?? [])].reverse();
 
+  // Frase hilarante rotando (más seguido cuando está calculando).
+  useEffect(() => {
+    const pick = () => setPhrase(FRASES[Math.floor(Math.random() * FRASES.length)]);
+    pick();
+    const id = setInterval(pick, botWorking ? 5000 : 9000);
+    return () => clearInterval(id);
+  }, [botWorking]);
+
+  // ── Timer de la próxima pasada ──
   const intervalMs: number = data?.intervalMs ?? 300000;
   const lastPassAtMs: number | null = data?.lastPassAtMs ?? null;
   const elapsed = lastPassAtMs ? now - lastPassAtMs : 0;
@@ -46,6 +72,35 @@ export default function BotActivity() {
   const progress = Math.min(100, intervalMs > 0 ? (elapsed / intervalMs) * 100 : 0);
   const mm = Math.floor(remainingMs / 60000);
   const ss = Math.floor((remainingMs % 60000) / 1000);
+
+  // ── Autoscroll LENTO y suave hacia lo más nuevo ──
+  const newest = events.length ? `${events[events.length - 1].t}|${events[events.length - 1].message}` : '';
+  useEffect(() => {
+    const el = consoleRef.current;
+    if (!el || !newest || newest === lastKey.current) return;
+    lastKey.current = newest;
+    const from = el.scrollTop;
+    const to = el.scrollHeight - el.clientHeight;
+    const dist = to - from;
+    if (Math.abs(dist) < 3) return;
+    // Al abrir, salta directo al final; después se desliza lento.
+    if (firstLoad.current) {
+      firstLoad.current = false;
+      el.scrollTop = to;
+      return;
+    }
+    const dur = 2600;
+    const t0 = performance.now();
+    let raf = 0;
+    const step = (t: number) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.scrollTop = from + dist * e;
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [newest]);
 
   const runNow = async () => {
     setRunning(true);
@@ -85,12 +140,13 @@ export default function BotActivity() {
       <div className="next-run">
         <div className="next-label">
           {botWorking
-            ? '◌ IA TRABAJANDO AHORA...'
+            ? '◌ IA CALCULANDO AHORA...'
             : `◌ PRÓXIMA PASADA DEL BOT EN ${mm}:${ss.toString().padStart(2, '0')}`}
         </div>
         <div className={`progress ${botWorking ? 'busy' : ''}`}>
           <div className="progress-fill" style={botWorking ? undefined : { width: `${progress}%` }} />
         </div>
+        <div className="next-phrase">“{phrase}”</div>
       </div>
 
       <div className="console" ref={consoleRef}>
@@ -100,7 +156,7 @@ export default function BotActivity() {
           </div>
         )}
         {events.map((e, i) => (
-          <div key={i} className={`console-line ${e.level}`}>
+          <div key={`${e.t}-${i}`} className={`console-line ${e.level}`}>
             <span className="ts">{new Date(e.t).toLocaleTimeString()}</span> {e.message}
           </div>
         ))}

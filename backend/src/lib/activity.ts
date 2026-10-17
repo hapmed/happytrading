@@ -11,7 +11,7 @@ export type BotState =
 
 export type LogLevel = 'info' | 'ai' | 'ok' | 'warn' | 'error';
 
-const LOG_MAX = 40;
+const LOG_MAX = 200;
 const STATE_TTL = 3600;
 
 /** Estado actual del bot para un usuario (se ve en el Centro de Actividad). */
