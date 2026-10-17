@@ -320,6 +320,18 @@ async function planForUser(userId: string): Promise<void> {
   }
   await logEvent(userId, `Saldo leído · ${balances.length} monedas`, 'info');
 
+  // Recuperar fondos de FUTUROS → Spot: deben estar en la bolsa de inversión
+  // (si no, la app no los ve y el bot no los puede usar).
+  try {
+    const fut = await (client as any).futuresBalance?.();
+    const fq = Number(fut?.find((b: any) => b.currency === quote)?.total ?? 0);
+    if (fq > 0.1) {
+      await (client as any).transfer('UMFUTURE_MAIN', quote.toUpperCase(), Number(fq.toFixed(6)));
+      await logEvent(userId, `💼 Rescaté ${fq.toFixed(4)} ${quote.toUpperCase()} de Futuros → a la bolsa de Spot`, 'info');
+      balances = await client.balance();
+    }
+  } catch {}
+
   for (const b of balances) {
     await prisma.balanceSnapshot.create({
       data: {
@@ -548,9 +560,10 @@ async function planForUser(userId: string): Promise<void> {
   const ranked: Array<{ symbol: string; vol: number }> = [];
   for (const sym of symbols) {
     try {
-      // Solo pares que ALCANCEN con holgura (evita comprar algo que luego no se pueda vender)
+      // Solo pares que ALCANCEN con holgura AL TAMAÑO DE ORDEN (micro-op): así todo
+      // lo que compre será vendible y nunca trabará capital en algo que no se vende.
       const lim0 = limits.get(sym);
-      if (lim0 && lim0.minimumValue * 1.3 > cashRemaining) continue;
+      if (lim0 && lim0.minimumValue * 1.3 > Math.min(cashRemaining, maxOrder)) continue;
       const t = await client.ticker(sym);
       tickerCache.set(sym, t);
       const last = Number(t.last ?? 0);

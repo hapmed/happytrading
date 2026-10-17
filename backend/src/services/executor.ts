@@ -324,20 +324,29 @@ export async function runExecutorAll(): Promise<void> {
           continue;
         }
         await logEvent(user.id, `⚙ Worker: BUY ${ins.symbol} @ ${price}`, 'ok');
-        const placed = await client.placeOrder({ book: ins.symbol, side: 'buy', type: 'market', minor: roundStr(minor, 2) });
+        // Comprar por CANTIDAD alineada al step (no por monto): así la posición queda
+        // en múltiplos exactos y al venderla se vende TODA → no queda polvo.
+        const stepB = lim?.stepSize ?? 0;
+        const qtyBuy = floorToStep(price > 0 ? minor / price : 0, stepB);
+        const useQty = stepB > 0 && qtyBuy > 0 && (!lim || (qtyBuy >= lim.minimumAmount && qtyBuy * price >= lim.minimumValue));
+        const placed = useQty
+          ? await client.placeOrder({ book: ins.symbol, side: 'buy', type: 'market', major: qtyStr(qtyBuy, stepB) })
+          : await client.placeOrder({ book: ins.symbol, side: 'buy', type: 'market', minor: roundStr(minor, 2) });
+        const buyQty = useQty ? qtyBuy : price > 0 ? minor / price : 0;
+        const spent = useQty ? qtyBuy * price : minor;
         const trade = await prisma.trade.create({
           data: {
-            userId: user.id, symbol: ins.symbol, side: 'BUY', amount: roundStr(minor, 2), price: String(price),
+            userId: user.id, symbol: ins.symbol, side: 'BUY', amount: roundStr(spent, 4), price: String(price),
             status: 'PENDING', source: 'AI', reason: ins.reason ?? null, externalId: placed?.oid ? String(placed.oid) : null,
           },
         });
-        await applyPosition(user.id, ins.symbol, 'BUY', price > 0 ? minor / price : 0, price, {
+        await applyPosition(user.id, ins.symbol, 'BUY', buyQty, price, {
           sl: ins.slPriceMxn ? Number(ins.slPriceMxn) : undefined,
           tp: ins.tpPriceMxn ? Number(ins.tpPriceMxn) : undefined,
         });
         await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'EXECUTED', executedAt: new Date(), tradeId: trade.id } });
-        // Descontar el MXN gastado para no sobre-comprar en la misma pasada.
-        mxnMap.set(ins.userId, Math.max(0, mxn - minor));
+        // Descontar lo gastado para no sobre-comprar en la misma pasada.
+        mxnMap.set(ins.userId, Math.max(0, mxn - spent));
         await queueNotification(user.id, 'TRADE', `BUY ${ins.symbol} (plan IA)`, `${ins.reason ?? ''} @ ${price}`);
       } else {
         // Vender: capar por el saldo REAL disponible (la posición puede ir desfasada por comisiones).
@@ -414,10 +423,10 @@ export async function runExecutorAll(): Promise<void> {
       await prisma.position.update({ where: { id: pos.id }, data: { peakPrice: String(peak) } }).catch(() => {});
     }
     const peakPct = avg > 0 ? ((peak - avg) / avg) * 100 : 0;
-    // Activa el trailing solo cuando el pico supera el costo de comisión (~0.35%)
-    // y vende a 0.1% del pico → nunca deja la ganancia por debajo de las comisiones.
-    const trailActivate = tpPct > 0 ? Math.max(0.35, tpPct * 0.7) : 0;
-    const trailDist = tpPct > 0 ? Math.max(0.1, tpPct * 0.2) : 0;
+    // Trailing fino: en cuanto el pico pasa ~0.45% y retrocede ~0.15%, vende
+    // (captura ganancias chicas antes de que se esfumen).
+    const trailActivate = tpPct > 0 ? Math.max(0.35, tpPct * 0.45) : 0;
+    const trailDist = tpPct > 0 ? Math.max(0.1, tpPct * 0.15) : 0;
     const hitTrail = tpPct > 0 && peakPct >= trailActivate && changePct <= peakPct - trailDist;
 
     // Prioriza los niveles por operación (los del usuario mandan sobre los de la IA).

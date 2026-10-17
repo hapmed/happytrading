@@ -120,9 +120,23 @@ export class BinanceClient {
     }, true);
   }
 
-  /** Transferencia universal entre carteras (MAIN_FUNDING / FUNDING_MAIN). */
-  async transfer(type: 'MAIN_FUNDING' | 'FUNDING_MAIN', asset: string, amount: number): Promise<void> {
+  /** Transferencia universal entre carteras (MAIN_FUNDING / FUNDING_MAIN / UMFUTURE_MAIN...). */
+  async transfer(
+    type: 'MAIN_FUNDING' | 'FUNDING_MAIN' | 'MAIN_UMFUTURE' | 'UMFUTURE_MAIN',
+    asset: string,
+    amount: number,
+  ): Promise<void> {
     await this.request('POST', '/sapi/v1/asset/transfer', { type, asset, amount: String(amount) }, true);
+  }
+
+  /** Saldo en Futuros (USDⓈ-M) — para recuperarlo a Spot. */
+  async futuresBalance(): Promise<Array<{ currency: string; available: string; total: string }>> {
+    const r = await this.request<any>('GET', '/fapi/v2/balance', {}, true, 'https://fapi.binance.com').catch(() => []);
+    return (Array.isArray(r) ? r : []).map((x: any) => ({
+      currency: String(x.asset ?? '').toLowerCase(),
+      available: String(Number(x.availableBalance ?? 0)),
+      total: String(Number(x.balance ?? 0)),
+    }));
   }
 
   /** Convierte entre activos (Binance Convert) — permite montos chicos (desde ~0.5 USDT). */
