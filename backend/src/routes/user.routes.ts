@@ -860,6 +860,49 @@ export async function userRoutes(app: FastifyInstance) {
     };
   });
 
+  // Cerrar TODAS las posiciones abiertas de Futuros y traer el dinero a la bolsa (Spot).
+  app.post('/futures/close', { preHandler: [authenticate] }, async (req, reply) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const closed: any[] = [];
+    try {
+      const pos = await client.raw('GET', '/fapi/v2/positionRisk', {}, true, 'https://fapi.binance.com');
+      for (const p of Array.isArray(pos) ? pos : []) {
+        const amt = Number(p.positionAmt ?? 0);
+        if (!amt) continue;
+        const side = amt > 0 ? 'SELL' : 'BUY'; // cerrar un largo = vender
+        const qty = Math.abs(amt);
+        try {
+          const o = await client.raw(
+            'POST',
+            '/fapi/v1/order',
+            { symbol: p.symbol, side, type: 'MARKET', quantity: String(qty), reduceOnly: 'true' },
+            true,
+            'https://fapi.binance.com',
+          );
+          closed.push({ symbol: p.symbol, side, qty, ok: true, orderId: o?.orderId ?? null });
+          await logEvent(req.user.sub, `🔒 Cerré la posición de Futuros ${p.symbol} (${qty})`, 'ok');
+        } catch (e: any) {
+          closed.push({ symbol: p.symbol, side, qty, ok: false, error: String(e?.message ?? e).slice(0, 120) });
+        }
+      }
+      // Traer a Spot lo transferible
+      await new Promise((r) => setTimeout(r, 3000));
+      const bal = await client.raw('GET', '/fapi/v2/balance', {}, true, 'https://fapi.binance.com');
+      const usdt = (Array.isArray(bal) ? bal : []).find((b: any) => String(b.asset).toUpperCase() === 'USDT');
+      const can = Number(usdt?.maxWithdrawAmount ?? 0);
+      let transferred = 0;
+      if (can > 0.1) {
+        await client.transfer('UMFUTURE_MAIN', 'USDT', Number((can * 0.999).toFixed(6)));
+        transferred = can;
+        await logEvent(req.user.sub, `💼 Traje ${can.toFixed(4)} USDT de Futuros → a la bolsa de Spot`, 'ok');
+      }
+      return { closed, transferred };
+    } catch (e: any) {
+      return reply.code(400).send({ error: String(e?.message ?? e).slice(0, 150) });
+    }
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
