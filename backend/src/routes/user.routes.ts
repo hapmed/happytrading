@@ -842,6 +842,7 @@ export async function userRoutes(app: FastifyInstance) {
     await tryOne('earnLocked', 'GET', '/sapi/v1/simple-earn/locked/position', { size: 100 });
     await tryOne('margin', 'GET', '/sapi/v1/margin/account');
     await tryOne('futures', 'GET', '/fapi/v2/balance', {}, 'https://fapi.binance.com');
+    await tryOne('futuresPos', 'GET', '/fapi/v2/positionRisk', {}, 'https://fapi.binance.com');
     const nz = (arr: any[], f: (x: any) => number) => (arr ?? []).filter((x) => f(x) > 0);
     return {
       resumen: {
@@ -849,7 +850,10 @@ export async function userRoutes(app: FastifyInstance) {
         funding: nz(Array.isArray(out.funding) ? out.funding : [], (b) => Number(b.free)).map((b: any) => ({ a: b.asset, free: b.free, frozen: b.freeze })),
         earnFlexible: (out.earnFlexible?.rows ?? []).map((b: any) => ({ a: b.asset, amt: b.totalAmount })),
         earnLocked: (out.earnLocked?.rows ?? []).map((b: any) => ({ a: b.asset, amt: b.amount })),
-        futures: nz(Array.isArray(out.futures) ? out.futures : [], (b) => Number(b.balance)).map((b: any) => ({ a: b.asset, bal: b.balance })),
+        futures: nz(Array.isArray(out.futures) ? out.futures : [], (b) => Number(b.balance)).map((b: any) => ({ a: b.asset, bal: b.balance, disponible: b.availableBalance, transferible: b.maxWithdrawAmount })),
+        futuresAbiertas: (Array.isArray(out.futuresPos) ? out.futuresPos : [])
+          .filter((p: any) => Number(p.positionAmt ?? 0) !== 0)
+          .map((p: any) => ({ symbol: p.symbol, amt: p.positionAmt, entry: p.entryPrice, pnl: p.unRealizedProfit, lev: p.leverage })),
         margin: out.margin?.error ? { error: out.margin.error } : 'ok',
         earnLockedErr: out.earnLocked?.error ?? null,
       },
