@@ -779,10 +779,26 @@ async function planForUser(userId: string): Promise<void> {
           `🧮 ${symbol}: EV +${evPct.toFixed(2)}% · p=${(pWin * 100).toFixed(0)}% · Kelly ${(kelly * 100).toFixed(0)}% · spread ${spreadPPct.toFixed(2)}% → COMPRO`,
           'ok',
         );
-        // SIZING: maxOrder es el TECHO; la IA puede pedir menos (size 0.2..1).
-        // Si no lo manda, se usa el techo completo.
+        // 🎯 CONFIANZA ALTA = "ganancia segura": SIN TOPE → invierte TODA la caja
+        //    (y rota/vende lo que haga falta para fondearla). Debe ser rápido.
+        const sureGain = signal.confidence >= 0.75 && cheapDeep && spreadPPct <= 1.2;
+        const cap = sureGain ? cashRemaining : maxOrder;
+        if (sureGain) {
+          await logEvent(
+            userId,
+            `🎯 GANANCIA SEGURA en ${symbol} (conf ${(signal.confidence * 100).toFixed(0)}% · z=${z.toFixed(2)} · RSI=${indicators?.rsi} · EV +${evPct.toFixed(2)}%) → SIN TOPE: invierto toda la caja ($${cashRemaining.toFixed(2)})`,
+            'ok',
+          );
+        }
+        await logEvent(
+          userId,
+          `🧮 ${symbol}: EV +${evPct.toFixed(2)}% · p=${(pWin * 100).toFixed(0)}% · Kelly ${(kelly * 100).toFixed(0)}% · spread ${spreadPPct.toFixed(2)}% → COMPRO`,
+          'ok',
+        );
+        // SIZING: maxOrder es el TECHO normal; la IA puede pedir menos (size 0.2..1).
+        // Pero si es "ganancia segura", el techo desaparece y usa toda la caja.
         const sizeFactor = signal.size && signal.size > 0 ? Math.max(0.2, Math.min(1, signal.size)) : 1;
-        const size = maxOrder * sizeFactor;
+        const size = sureGain ? cap : maxOrder * sizeFactor;
         let spend = Math.min(size, cashRemaining);
         const entry = signal.entryPrice && signal.entryPrice > 0 ? signal.entryPrice : last;
 
@@ -796,16 +812,17 @@ async function planForUser(userId: string): Promise<void> {
 
         // ROTA para fondear esta compra:
         //  - Normal: solo si no alcanza el mínimo para operar.
-        //  - Imperdible: hasta llenar el tamaño objetivo (vende lo que sea, aunque pierda).
-        const target = imperdible ? maxOrder : minSellable;
+        //  - Imperdible / Segura: hasta llenar el objetivo (vende lo que sea, aunque pierda).
+        const bigBet = sureGain || imperdible;
+        const target = bigBet ? Math.max(cap, minSellable) : minSellable;
         if (spend < target && rotate) {
           const freedValue = await tryRotate(userId, symbol, client, {
             preferWorst: true,
             needed: target - spend,
-            max: imperdible ? 4 : 1,
+            max: bigBet ? 8 : 1,
             limits,
           });
-          if (freedValue > 0) spend = Math.min(maxOrder, spend + freedValue);
+          if (freedValue > 0) spend = Math.min(cap, spend + freedValue);
         }
         if (spend < minSellable) {
           await logEvent(
