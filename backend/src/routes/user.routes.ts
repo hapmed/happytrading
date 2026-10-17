@@ -54,6 +54,8 @@ async function analyzeStuck(client: any, quote: string) {
       price = Number((await client.ticker(book)).last ?? 0);
     } catch {}
     const value = v.qty * price;
+    // Los saldos por debajo de 1 centavo son ruido: Binance ni los convierte.
+    if (value < 0.01) continue;
     let sellable = false;
     let reason = '';
     if (!lim) reason = `sin mercado ${book.toUpperCase()}`;

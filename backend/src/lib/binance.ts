@@ -159,6 +159,11 @@ export class BinanceClient {
     return this.request<any>('POST', '/sapi/v1/asset/dust', { asset: assets.map((a) => a.toUpperCase()) }, true);
   }
 
+  /** Variante: convierte los saldos pequeños a BTC (a veces acepta los que el de BNB rechaza). */
+  async dustConvertBtc(assets: string[]): Promise<any> {
+    return this.request<any>('POST', '/sapi/v1/asset/dust-btc', { asset: assets.map((a) => a.toUpperCase()) }, true);
+  }
+
   // ── Saldos (Spot + Simple Earn + Funding, para la valuación) ───────
   async balance(): Promise<Array<{ currency: string; available: string; locked: string; total: string }>> {
     const [spot, funding, earn] = await Promise.all([
