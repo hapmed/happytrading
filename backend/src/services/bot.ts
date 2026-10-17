@@ -53,7 +53,7 @@ async function tryRotate(
   userId: string,
   excludeSymbol: string,
   client: ExchangeClient,
-  opts: { preferWorst?: boolean; needed?: number; max?: number } = {},
+  opts: { preferWorst?: boolean; needed?: number; max?: number; limits?: Map<string, BookLimits> } = {},
 ): Promise<number> {
   const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 }, reserved: false } });
   const others = positions.filter((p) => p.symbol !== excludeSymbol);
@@ -68,6 +68,9 @@ async function tryRotate(
       const qty = Number(p.baseAmount);
       const value = qty * price;
       if (value <= 0 || price <= 0) continue;
+      // Solo posiciones realmente VENDIBLES (si no, no tiene sentido rotar polvo).
+      const limR = opts.limits?.get(p.symbol);
+      if (limR && (value < limR.minimumValue || qty < limR.minimumAmount)) continue;
       const avg = Number(p.avgCostMxn);
       const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
       cands.push({ symbol: p.symbol, qty, price, value, pnlPct });
@@ -626,7 +629,12 @@ async function planForUser(userId: string): Promise<void> {
       const baseAvailable = Number(bal?.available ?? '0');
       const key = { userId_symbol: { userId, symbol } };
       let pos = await prisma.position.findUnique({ where: key });
-      if (!pos && baseAvailable > 0) {
+      // No "resucitar" posiciones de POLVO: si el saldo no alcanza el mínimo del
+      // exchange, no es vendible → no se registra ni se intenta operar.
+      const limOrphan = limits.get(symbol);
+      const orphanTradable =
+        !limOrphan || (baseAvailable * last >= limOrphan.minimumValue && baseAvailable >= limOrphan.minimumAmount);
+      if (!pos && baseAvailable > 0 && orphanTradable) {
         const buys = await prisma.trade.findMany({ where: { userId, symbol, side: 'BUY' } });
         if (buys.length) {
           let q = 0;
@@ -793,6 +801,7 @@ async function planForUser(userId: string): Promise<void> {
             preferWorst: true,
             needed: target - spend,
             max: imperdible ? 4 : 1,
+            limits,
           });
           if (freedValue > 0) spend = Math.min(maxOrder, spend + freedValue);
         }
