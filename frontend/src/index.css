@@ -968,6 +968,21 @@ a:hover {
   0%, 100% { filter: drop-shadow(0 0 4px rgba(217, 119, 87, 0.35)); }
   50% { filter: drop-shadow(0 0 14px rgba(217, 119, 87, 0.8)); }
 }
+
+/* ---------- Clawd (mascota pixel-art de Claude Code) ---------- */
+.clawd {
+  image-rendering: pixelated;
+  animation: clawdBob 2.6s ease-in-out infinite;
+  filter: drop-shadow(0 8px 12px rgba(217, 119, 87, 0.35));
+}
+.clawd.busy {
+  animation: clawdBob 0.55s ease-in-out infinite;
+  filter: drop-shadow(0 8px 18px rgba(255, 179, 138, 0.8));
+}
+@keyframes clawdBob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.04); }
+}
 @keyframes robotPulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.07); }
