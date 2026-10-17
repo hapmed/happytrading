@@ -44,51 +44,28 @@ export default function BotActivity() {
     return () => clearInterval(id);
   }, [botWorking]);
 
-  const ROBOT_WORK = [
-`     ✳
-╭─────────╮
-│ ◉     ◉ │
-│   ╰▽▽▽╯ │
-╰──┬───┬──╯
-╭──┴───┴──╮
-│░✳░✳░✳░✳░│
-╰─────────╯`,
-`     ✳
-╭─────────╮
-│ ◉     ◉ │
-│   ╰▽▽▽╯ │
-╰──┬───┬──╯
-╭──┴───┴──╮
-│✳░✳░✳░✳░✳│
-╰─────────╯`,
-`     ✳
-╭─────────╮
-│  ◉   ◉  │
-│   ╰▽▽▽╯ │
-╰──┬───┬──╯
-╭──┴───┴──╮
-│░✳░✳░✳░✳░│
-╰─────────╯`,
-  ];
-  const ROBOT_IDLE = [
-`     ✳
-╭─────────╮
-│ ◉     ◉ │
-│   ╰───╯ │
-╰──┬───┬──╯
-╭──┴───┴──╮
-│░░░░░░░░░│
-╰─────────╯`,
-`     ✳
-╭─────────╮
-│ ─     ─ │
-│   ╰───╯ │
-╰──┬───┬──╯
-╭──┴───┴──╮
-│░░░░░░░░░│
-╰─────────╯`,
-  ];
-  const robotArt = (botWorking ? ROBOT_WORK : ROBOT_IDLE)[frame % (botWorking ? 3 : 2)];
+  // La marca de Claude: el "sunburst" (estrella de 8 rayos).
+  const CLAUDE_STAR = `          │
+      ╲   │   ╱
+       ╲  │  ╱
+        ╲ │ ╱
+──────────✳──────────
+        ╱ │ ╲
+       ╱  │  ╲
+      ╱   │   ╲
+          │`;
+  const CLAUDE_STAR_TIGHT = `          │
+       ╲  │  ╱
+        ╲ │ ╱
+         ╲│╱
+──────────✳──────────
+         ╱│╲
+        ╱ │ ╲
+       ╱  │  ╲
+          │`;
+  const ROBOT_WORK = [CLAUDE_STAR, CLAUDE_STAR_TIGHT, CLAUDE_STAR];
+  const ROBOT_IDLE = [CLAUDE_STAR];
+  const robotArt = (botWorking ? ROBOT_WORK : ROBOT_IDLE)[frame % (botWorking ? ROBOT_WORK.length : ROBOT_IDLE.length)];
   const botAlive = !!data?.botAlive;
   const events: any[] = data?.events ?? [];
 

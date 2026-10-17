@@ -950,18 +950,23 @@ a:hover {
 
 .ascii-robot {
   font-family: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
-  font-size: 15px;
-  line-height: 1.05;
+  font-size: 16px;
+  line-height: 1.1;
   color: #e8855f; /* coral Claude */
   text-shadow: 0 0 10px rgba(217, 119, 87, 0.6);
   margin: 0;
   white-space: pre;
   text-align: center;
+  animation: claudeGlow 3.2s ease-in-out infinite;
 }
 .ascii-robot.busy {
   color: #ffb38a;
   text-shadow: 0 0 16px rgba(217, 119, 87, 0.95);
   animation: robotPulse 0.4s ease-in-out infinite;
+}
+@keyframes claudeGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(217, 119, 87, 0.35)); }
+  50% { filter: drop-shadow(0 0 14px rgba(217, 119, 87, 0.8)); }
 }
 @keyframes robotPulse {
   0%, 100% { transform: scale(1); }
