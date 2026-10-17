@@ -952,15 +952,15 @@ a:hover {
   font-family: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
   font-size: 15px;
   line-height: 1.05;
-  color: var(--green);
-  text-shadow: 0 0 8px rgba(0, 255, 157, 0.5);
+  color: #e8855f; /* coral Claude */
+  text-shadow: 0 0 10px rgba(217, 119, 87, 0.6);
   margin: 0;
   white-space: pre;
   text-align: center;
 }
 .ascii-robot.busy {
-  color: var(--yellow);
-  text-shadow: 0 0 14px rgba(255, 230, 0, 0.85);
+  color: #ffb38a;
+  text-shadow: 0 0 16px rgba(217, 119, 87, 0.95);
   animation: robotPulse 0.4s ease-in-out infinite;
 }
 @keyframes robotPulse {
