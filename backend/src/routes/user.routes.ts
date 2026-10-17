@@ -614,6 +614,57 @@ export async function userRoutes(app: FastifyInstance) {
     return { stuck: before.stuck, results, sellableRestante: after.sellable, stuckRestante: after.stuck };
   });
 
+  // Evaluación de cada moneda: ¿conviene VENDERLA o MANTENERLA?
+  app.get('/review', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const tp = me?.takeProfitPct ? Number(me.takeProfitPct) : 0;
+    const [positions, limits] = await Promise.all([
+      prisma.position.findMany({ where: { userId: req.user.sub, baseAmount: { gt: 0 } } }),
+      getBookLimits(client, 'binance').catch(() => new Map()),
+    ]);
+    const items: Array<{ symbol: string; base: string; qty: number; value: number; pnlPct: number; action: string; reason: string }> = [];
+    for (const p of positions) {
+      const base = p.symbol.split('_')[0];
+      let price = 0;
+      try {
+        price = Number((await client.ticker(p.symbol)).last ?? 0);
+      } catch {}
+      const qty = Number(p.baseAmount);
+      const value = qty * price;
+      const avg = Number(p.avgCostMxn);
+      const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
+      const lim: any = (limits as Map<string, any>).get(p.symbol);
+      const step = lim?.stepSize ?? 0;
+      const sellable = !lim || (floorToStep(qty, step) >= Number(lim.minimumAmount ?? 0) && value >= Number(lim.minimumValue ?? 0));
+      let action = 'MANTENER';
+      let reason = '';
+      if (!sellable) {
+        action = 'NO_VENDIBLE';
+        reason = 'bajo el mínimo del exchange (polvo): no se puede vender';
+      } else {
+        const ind = await getIndicators(base).catch(() => null);
+        if (!ind) {
+          reason = 'sin datos de mercado';
+        } else {
+          const caro = ind.stat === 'CARO' || Number(ind.zScore) >= 1 || Number(ind.bbPos) >= 80 || Number(ind.rsi) >= 72;
+          const barato = ind.stat === 'BARATO' || Number(ind.zScore) <= -1 || Number(ind.bbPos) <= 25;
+          const stats = `z=${ind.zScore} · pos_bandas=${ind.bbPos}% · RSI=${ind.rsi}`;
+          if (caro && !barato && pnlPct >= -0.2) {
+            action = 'VENDER';
+            reason = `está CARA (${stats}) → vender ahora = ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`;
+          } else if (barato) {
+            reason = `está BARATA (${stats}) → aún puede subir, se mantiene`;
+          } else {
+            reason = `neutra (${stats}) → espera el take-profit${tp > 0 ? ` (+${tp}%)` : ''}`;
+          }
+        }
+      }
+      items.push({ symbol: p.symbol, base, qty, value, pnlPct, action, reason });
+    }
+    return { items };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });

@@ -5,6 +5,7 @@ import { logEvent } from '../lib/activity.js';
 import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
 import { makeExchangeClient, quoteOf, type ExchangeClient } from '../lib/exchange.js';
 import { floorToStep, qtyStr } from '../lib/precision.js';
+import { getIndicators } from '../lib/indicators.js';
 
 function roundStr(n: number, dp: number): string {
   if (!isFinite(n) || n <= 0) return '0';
@@ -385,7 +386,9 @@ export async function runExecutorAll(): Promise<void> {
     const tpPct = user.takeProfitPct ? Number(user.takeProfitPct) : 0;
     const slPrice = pos.slPriceMxn ? Number(pos.slPriceMxn) : 0;
     const tpPrice = pos.tpPriceMxn ? Number(pos.tpPriceMxn) : 0;
-    if (slPct <= 0 && tpPct <= 0 && slPrice <= 0 && tpPrice <= 0) continue;
+    if (slPct <= 0 && tpPct <= 0 && slPrice <= 0 && tpPrice <= 0) {
+      // Sin niveles configurados igual evaluamos "vender caro" (núcleo de la estrategia).
+    }
     const price = priceMap.get(pos.symbol) ?? 0;
     if (price <= 0) continue;
     const avg = Number(pos.avgCostMxn);
@@ -405,11 +408,32 @@ export async function runExecutorAll(): Promise<void> {
     const trailDist = tpPct > 0 ? Math.max(0.1, tpPct * 0.2) : 0;
     const hitTrail = tpPct > 0 && peakPct >= trailActivate && changePct <= peakPct - trailDist;
 
-    // Prioriza los niveles por operación (de la IA); si no hay, usa los % del usuario.
+    // Prioriza los niveles por operación (los del usuario mandan sobre los de la IA).
     const hitSL = slPrice > 0 ? price <= slPrice : slPct > 0 && changePct <= -slPct;
     const hitTPfix = tpPrice > 0 ? price >= tpPrice : tpPct > 0 && changePct >= tpPct;
-    const hitTP = hitTPfix || hitTrail;
-    if (!hitSL && !hitTP) continue;
+
+    // ── EVALUACIÓN de la posición: ¿VENDER o MANTENER? ────────────────
+    //  1) Stop-loss, 2) Take-profit (fijo), 3) Trailing, 4) "Vender caro"
+    //     (si la estadística dice que está CARA y no vamos perdiendo).
+    let sellReason = '';
+    if (hitSL) sellReason = `Stop-loss ${changePct.toFixed(1)}%`;
+    else if (hitTPfix) sellReason = `Take-profit +${changePct.toFixed(1)}%`;
+    else if (hitTrail) sellReason = `Take-profit trailing +${changePct.toFixed(2)}% (pico +${peakPct.toFixed(2)}%)`;
+    else {
+      try {
+        const ind = await getIndicators(pos.symbol.split('_')[0]);
+        if (ind && changePct >= -0.2) {
+          const caro =
+            ind.stat === 'CARO' || Number(ind.zScore) >= 1 || Number(ind.bbPos) >= 80 || Number(ind.rsi) >= 72;
+          const barato =
+            ind.stat === 'BARATO' || Number(ind.zScore) <= -1 || Number(ind.bbPos) <= 25;
+          if (caro && !barato) {
+            sellReason = `Vender caro (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}% · z=${ind.zScore} · pos_bandas=${ind.bbPos}% · RSI=${ind.rsi})`;
+          }
+        }
+      } catch {}
+    }
+    if (!sellReason) continue;
 
     if (soldKeys.has(`${user.id}:${pos.symbol}`)) continue; // ya se vendió en este ciclo
     const client = clients.get(user.id)!;
@@ -424,11 +448,7 @@ export async function runExecutorAll(): Promise<void> {
       continue;
     }
     try {
-      const reason = hitSL
-        ? `Stop-loss ${changePct.toFixed(1)}%`
-        : hitTPfix
-          ? `Take-profit +${changePct.toFixed(1)}%`
-          : `Take-profit trailing +${changePct.toFixed(2)}% (pico +${peakPct.toFixed(2)}%)`;
+      const reason = sellReason;
       await logEvent(user.id, `⚙ Worker: SELL ${pos.symbol} · ${reason}`, 'warn');
       const placed = await client.placeOrder({ book: pos.symbol, side: 'sell', type: 'market', major: qtyStr(qty, stepP) });
       const trade = await prisma.trade.create({
