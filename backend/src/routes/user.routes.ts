@@ -618,6 +618,7 @@ export async function userRoutes(app: FastifyInstance) {
   app.get('/review', { preHandler: [authenticate] }, async (req) => {
     const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
     const client: any = await makeExchangeClient(me!);
+    const quote = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
     const tp = me?.takeProfitPct ? Number(me.takeProfitPct) : 0;
     const [positions, limits] = await Promise.all([
       prisma.position.findMany({ where: { userId: req.user.sub, baseAmount: { gt: 0 } } }),
@@ -662,6 +663,22 @@ export async function userRoutes(app: FastifyInstance) {
       }
       items.push({ symbol: p.symbol, base, qty, value, pnlPct, action, reason });
     }
+    // Añadir el polvo atorado (no son posiciones, pero conviene saber que existe).
+    try {
+      const st = await analyzeStuck(client, quote);
+      for (const s of st.stuck) {
+        if (items.some((i) => i.base === s.asset.toLowerCase())) continue;
+        items.push({
+          symbol: `${s.asset.toLowerCase()}_${quote}`,
+          base: s.asset.toLowerCase(),
+          qty: s.qty,
+          value: s.value,
+          pnlPct: 0,
+          action: 'DEJAR',
+          reason: `no se puede vender (${s.reason}) → se deja (vale ~$${s.value.toFixed(4)})`,
+        });
+      }
+    } catch {}
     return { items };
   });
 
