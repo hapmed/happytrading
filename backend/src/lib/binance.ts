@@ -92,6 +92,29 @@ export class BinanceClient {
     }));
   }
 
+  // ── Saldos en Binance Simple Earn (Flexible) ──────────────────────
+  // En Spot aparecen como "LD<activo>" (p.ej. LDUSDT); el bot debe poder
+  // verlos (para valorar) y rescatarlos (para operar).
+  async earnBalance(): Promise<Array<{ currency: string; available: string; total: string; productId: string }>> {
+    const r = await this.request<any>('GET', '/sapi/v1/simple-earn/flexible/position', { size: 100 }, true).catch(() => null);
+    return (r?.rows ?? []).map((x: any) => ({
+      currency: String(x.asset ?? '').toLowerCase(),
+      available: String(Number(x.totalAmount ?? 0)),
+      total: String(Number(x.totalAmount ?? 0)),
+      productId: String(x.productId ?? ''),
+    }));
+  }
+
+  /** Rescata (redeem) de Simple Earn Flexible → Spot, para poder operar. */
+  async earnRedeem(productId: string, amount: number, type: 'FAST' | 'NORMAL' = 'FAST'): Promise<any> {
+    return this.request('POST', '/sapi/v1/simple-earn/flexible/redeem', {
+      productId,
+      amount: String(amount),
+      type,
+      destAccount: 'SPOT',
+    }, true);
+  }
+
   /** Transferencia universal entre carteras (MAIN_FUNDING / FUNDING_MAIN). */
   async transfer(type: 'MAIN_FUNDING' | 'FUNDING_MAIN', asset: string, amount: number): Promise<void> {
     await this.request('POST', '/sapi/v1/asset/transfer', { type, asset, amount: String(amount) }, true);
@@ -116,11 +139,12 @@ export class BinanceClient {
     return this.request<any>('POST', '/sapi/v1/asset/dust', { asset: assets.map((a) => a.toUpperCase()) }, true);
   }
 
-  // ── Saldos (Spot + Funding, para la valuación del portafolio) ──────
+  // ── Saldos (Spot + Simple Earn + Funding, para la valuación) ───────
   async balance(): Promise<Array<{ currency: string; available: string; locked: string; total: string }>> {
-    const [spot, funding] = await Promise.all([
+    const [spot, funding, earn] = await Promise.all([
       this.request<{ balances: Array<{ asset: string; free: string; locked: string }> }>('GET', '/api/v3/account', {}, true),
       this.request<any>('POST', '/sapi/v1/asset/get-funding-asset', {}, true).catch(() => []),
+      this.earnBalance().catch(() => []),
     ]);
     const map = new Map<string, { free: number; locked: number }>();
     const add = (asset: string, free: number, locked: number) => {
@@ -128,7 +152,14 @@ export class BinanceClient {
       const prev = map.get(cur) ?? { free: 0, locked: 0 };
       map.set(cur, { free: prev.free + free, locked: prev.locked + locked });
     };
-    for (const b of spot.balances ?? []) add(b.asset, Number(b.free ?? 0), Number(b.locked ?? 0));
+    // Simple Earn aparece como "LD<activo>" en Spot → lo contamos aparte para no duplicar.
+    const earnLd = new Set(earn.map((e) => `ld${e.currency}`));
+    for (const b of spot.balances ?? []) {
+      const a = String(b.asset).toLowerCase();
+      if (earnLd.has(a)) continue;
+      add(a, Number(b.free ?? 0), Number(b.locked ?? 0));
+    }
+    for (const e of earn) add(e.currency, Number(e.available ?? 0), 0);
     for (const f of Array.isArray(funding) ? funding : []) {
       add(f.asset, Number(f.free ?? 0), Number(f.freeze ?? 0) + Number(f.locked ?? 0) + Number(f.withdrawing ?? 0));
     }

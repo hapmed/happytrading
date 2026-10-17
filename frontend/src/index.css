@@ -1099,6 +1099,51 @@ a:hover {
   50% { box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45), 0 0 14px rgba(55, 214, 122, 0.55); }
 }
 
+/* ---------- Chismógrafo del bot (¿qué onda con mi dinero?) ---------- */
+.drama-list { display: grid; gap: 12px; }
+.drama-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 3px solid var(--panel-border);
+  background: var(--bg2);
+  padding: 10px 12px;
+  box-shadow: 4px 4px 0 var(--panel-shadow);
+  animation: dramaIn 0.35s ease both;
+  min-width: 0;
+}
+.drama-emoji {
+  font-size: 30px;
+  line-height: 1;
+  animation: dramaWiggle 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.drama-title {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--cyan);
+  margin-bottom: 5px;
+  letter-spacing: 0.5px;
+}
+.drama-text {
+  font-family: var(--font-term);
+  font-size: 17px;
+  color: var(--text);
+  word-break: break-word;
+}
+.drama-warn { border-color: #ffd400; }
+.drama-ok { border-color: #37d67a; }
+.drama-fun { border-color: #ff7ad9; }
+.drama-danger { border-color: #ff5a5a; }
+@keyframes dramaIn {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes dramaWiggle {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(7deg) scale(1.12); }
+}
+
 /* ---------- Código de Scriptable ---------- */
 .code-box {
   height: 340px;

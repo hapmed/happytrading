@@ -14,6 +14,7 @@ import RecentTrades from '../components/RecentTrades';
 import Signals from '../components/Signals';
 import MarketThermometer from '../components/MarketThermometer';
 import ProfitVault from '../components/ProfitVault';
+import Drama from '../components/Drama';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -98,6 +99,7 @@ export default function Dashboard() {
         <MarketThermometer />
         <ProfitVault />
         
+        <Drama />
         <Positions />
         <Instructions />
         <RecentTrades trades={trades} />

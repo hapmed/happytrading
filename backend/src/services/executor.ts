@@ -6,6 +6,7 @@ import { getBookLimits, BookLimits } from '../lib/bookLimits.js';
 import { makeExchangeClient, quoteOf, type ExchangeClient } from '../lib/exchange.js';
 import { floorToStep, qtyStr } from '../lib/precision.js';
 import { getIndicators } from '../lib/indicators.js';
+import { redeemAllEarn } from '../lib/earn.js';
 
 function roundStr(n: number, dp: number): string {
   if (!isFinite(n) || n <= 0) return '0';
@@ -230,7 +231,18 @@ export async function runExecutorAll(): Promise<void> {
   const balMap = new Map<string, Map<string, { avail: number; total: number }>>();
   for (const u of users) {
     try {
-      const bals = await clients.get(u.id)!.balance();
+      const clientU: any = clients.get(u.id)!;
+      // Si Binance metió fondos en Simple Earn (LD*), los traemos a Spot para poder
+      // operar: los fondos deben estar SIEMPRE bajo nuestro control.
+      const rescued = await redeemAllEarn(clientU).catch(() => []);
+      if (rescued.length) {
+        await logEvent(
+          u.id,
+          `🏖️ Rescaté de Simple Earn: ${rescued.map((r) => `${r.amount} ${r.asset.toUpperCase()}`).join(', ')} → ya está en Spot, bajo control del bot`,
+          'info',
+        );
+      }
+      const bals = await clientU.balance();
       const cmap = new Map<string, { avail: number; total: number }>();
       for (const b of bals) {
         const cur = String(b.currency ?? '').toLowerCase();

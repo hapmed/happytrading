@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { kv } from '../lib/kv.js';
 import { generateSignal } from './ai.js';
 import { makeExchangeClient, hasExchangeCreds, type ExchangeClient } from '../lib/exchange.js';
+import { redeemAllEarn } from '../lib/earn.js';
 import { setState, logEvent } from '../lib/activity.js';
 import { valuePortfolio } from '../lib/portfolio.js';
 import { getRegime } from './regime.js';
@@ -288,6 +289,19 @@ async function planForUser(userId: string): Promise<void> {
 
   await setState(userId, 'reading_balance', 'Leyendo saldo');
   await logEvent(userId, 'IA planificando · leyendo saldo', 'info');
+
+  // Los fondos deben estar SIEMPRE bajo nuestro control: si Binance los metió en
+  // Simple Earn (aparecen como LD*), los regresamos a Spot antes de planear.
+  try {
+    const rescued = await redeemAllEarn(client);
+    if (rescued.length) {
+      await logEvent(
+        userId,
+        `🏖️ Rescaté de Simple Earn: ${rescued.map((r) => `${r.amount} ${r.asset.toUpperCase()}`).join(', ')} → ya bajo control del bot`,
+        'info',
+      );
+    }
+  } catch {}
 
   let balances: any[];
   try {

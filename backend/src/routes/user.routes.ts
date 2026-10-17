@@ -13,6 +13,7 @@ import { getUsage, getLimits, getOpenRouterQuota } from '../lib/usage.js';
 import { getIndicators } from '../lib/indicators.js';
 import { makeExchangeClient, hasExchangeCreds } from '../lib/exchange.js';
 import { floorToStep, qtyStr } from '../lib/precision.js';
+import { listEarn } from '../lib/earn.js';
 
 // Monedas del termómetro de mercado (pares contra MXN).
 const THERMO_COINS = [
@@ -184,9 +185,18 @@ export async function userRoutes(app: FastifyInstance) {
       const client = await makeExchangeClient(user);
       if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
       const account = await (client as any).accountStatus();
-      const balances = (account?.balances ?? [])
-        .filter((b: any) => Number(b.free) + Number(b.locked) > 0)
-        .map((b: any) => ({ asset: b.asset, free: b.free, locked: b.locked }));
+      // Usamos balance() (Spot + Simple Earn + Funding) para no "perder de vista" fondos.
+      let balances: Array<{ asset: string; free: string; locked: string }> = [];
+      try {
+        const all = await (client as any).balance();
+        balances = (all ?? [])
+          .filter((b: any) => Number(b.total) > 0)
+          .map((b: any) => ({ asset: String(b.currency).toUpperCase(), free: String(b.available ?? 0), locked: String(b.locked ?? 0) }));
+      } catch {
+        balances = (account?.balances ?? [])
+          .filter((b: any) => Number(b.free) + Number(b.locked) > 0)
+          .map((b: any) => ({ asset: b.asset, free: b.free, locked: b.locked }));
+      }
       return {
         exchange: 'binance',
         canTrade: account?.canTrade,
@@ -680,6 +690,138 @@ export async function userRoutes(app: FastifyInstance) {
       }
     } catch {}
     return { items };
+  });
+
+  // ── CHISMÓGRAFO DEL BOT: explica qué está pasando, con mucho humor ──
+  app.get('/drama', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const quote = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    const client: any = await makeExchangeClient(me!);
+    const cards: Array<{ id: string; emoji: string; title: string; text: string; mood: string }> = [];
+
+    let balances: any[] = [];
+    try {
+      balances = await client.balance();
+    } catch {}
+    const amountOf = (cur: string) =>
+      Number(balances.find((b: any) => String(b.currency).toLowerCase() === cur)?.total ?? 0);
+
+    const [earn, stuckRes, positions, trades, live] = await Promise.all([
+      listEarn(client).catch(() => []),
+      analyzeStuck(client, quote).catch(() => ({ stuck: [] as any[] })),
+      prisma.position.findMany({ where: { userId: req.user.sub, baseAmount: { gt: 0 } } }),
+      prisma.trade.findMany({
+        where: { userId: req.user.sub, createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      getLiveValuation(req.user.sub).catch(() => null),
+    ]);
+    const stuck: any[] = stuckRes.stuck ?? [];
+    const invested = me?.initialCapital ? Number(me.initialCapital) : 0;
+    const currentValue = live?.currentValue ?? 0;
+    const pnlPct = invested > 0 ? ((currentValue - invested) / invested) * 100 : 0;
+
+    // 🏖️ Fondos que Binance se llevó a Simple Earn
+    if (earn.length) {
+      const tot = earn.map((e) => `${e.amount} ${e.asset.toUpperCase()}`).join(', ');
+      cards.push({
+        id: 'earn', emoji: '🏖️', title: '¡SE FUERON DE VACACIONES!', mood: 'warn',
+        text: `Binance agarró ${tot} y se los llevó a "Simple Earn" a tomar el sol. El bot ya mandó la grúa a traerlos a Spot. Interés ganado: como $0.00000003 — no alcanza ni para un chicle.`,
+      });
+    }
+
+    // ✨ Polvo cósmico (no vendible)
+    if (stuck.length) {
+      const names = stuck.slice(0, 4).map((s) => s.asset).join(', ');
+      const val = stuck.reduce((a: number, s: any) => a + Number(s.value || 0), 0);
+      cards.push({
+        id: 'dust', emoji: '✨', title: 'POLVO CÓSMICO', mood: 'fun',
+        text: `${names} valen $${val.toFixed(6)} entre todos. Ni Binance los quiere. Son el chicle pegado debajo del asiento: existen, pero no molestan.`,
+      });
+    }
+
+    // 📉 / 🚀 Cómo va la ganancia
+    if (invested > 0 && Math.abs(pnlPct) >= 0.05) {
+      if (pnlPct < 0) {
+        cards.push({
+          id: 'loss', emoji: '📉', title: 'EL MERCADO ESTÁ DE LUNES', mood: 'warn',
+          text: `Vas ${pnlPct.toFixed(2)}%. No es maldición: son las comisiones (0.2% por ida y vuelta) y que las memecoins respiran fuerte. Rojo hoy, verde mañana.`,
+        });
+      } else {
+        cards.push({
+          id: 'win', emoji: '🚀', title: '¡ALGUIEN ESTÁ GANANDO!', mood: 'ok',
+          text: `Vas +${pnlPct.toFixed(2)}%. El bot está chambeando. No lo interrumpas.`,
+        });
+      }
+    }
+
+    // 🏺 La bóveda
+    let vaultMxn = 0;
+    try {
+      const f = await client.fundingBalance();
+      const fq = Number(f?.find((b: any) => b.currency === quote)?.available ?? 0);
+      vaultMxn = quote === 'mxn' ? fq : fq * Number((await client.ticker(`${quote}_mxn`))?.last ?? 0);
+    } catch {}
+    if (vaultMxn < 50) {
+      cards.push({
+        id: 'vault', emoji: '🏺', title: 'LA ALCANCÍA ESTÁ EN DIETA', mood: 'fun',
+        text: `La bóveda va en $${vaultMxn.toFixed(2)} de $50. Aguanta: apenas va juntando para su primer viaje a tu CLABE.`,
+      });
+    }
+
+    // 😴 Sin operar
+    const lastTrade = trades[0];
+    const hours = lastTrade ? (Date.now() - new Date(lastTrade.createdAt).getTime()) / 3_600_000 : 99;
+    if (hours >= 3) {
+      cards.push({
+        id: 'sleep', emoji: '😴', title: 'EL BOT ESTÁ DE BRAZOS CRUZADOS', mood: 'fun',
+        text: `Lleva ${hours.toFixed(1)} h sin operar porque nada está lo bastante barato. La paciencia también es estrategia (y no cobra comisión).`,
+      });
+    }
+
+    // 🔁 Rotaciones (cambió de caballo a media carrera)
+    const rot = trades.find((t) => /rotar/i.test(String(t.reason ?? '')));
+    if (rot) {
+      cards.push({
+        id: 'rotate', emoji: '🔁', title: 'EL DJ ROTÓ', mood: 'warn',
+        text: `Vendimos ${String(rot.symbol).split('_')[0].toUpperCase()} para comprar otra que pintaba mejor. Como cambiar de fila en el cine cuando no ves bien.`,
+      });
+    }
+
+    // 🧾 Impuesto al ping-pong (comisiones)
+    if (trades.length > 0) {
+      cards.push({
+        id: 'fees', emoji: '🧾', title: 'IMPUESTO AL PING-PONG', mood: 'fun',
+        text: `Llevas ${trades.length} ${trades.length === 1 ? 'operación' : 'operaciones'} en 24 h. Cada compra+venta se lleva ~0.2% de peaje. El mercado cobra en cada vuelta.`,
+      });
+    }
+
+    // 💤 Sin caja para operar
+    if (amountOf(quote) < 1 && positions.length === 0) {
+      cards.push({
+        id: 'broke', emoji: '💸', title: 'CAJA VACÍA', mood: 'warn',
+        text: `No hay ${quote.toUpperCase()} para operar. La IA se fue a tomar un café para no gastar tokens.`,
+      });
+    }
+
+    // 🎢 Posición quietecita
+    if (positions.length > 0) {
+      const pname = String(positions[0].symbol).split('_')[0].toUpperCase();
+      cards.push({
+        id: 'ride', emoji: '🎢', title: 'MONTAÑA RUSA EMOCIONAL', mood: 'fun',
+        text: `${pname} sube, baja, sube... y tú mirando la pantalla. El bot espera su momento (TP/salida). Respira.`,
+      });
+    }
+
+    // Si no hay nada interesante, un clásico
+    if (!cards.length) {
+      cards.push({
+        id: 'chill', emoji: '🛸', title: 'TODO TRANQUILO', mood: 'ok',
+        text: 'Nada raro que reportar. El bot está en modo acecho esperando gangas.',
+      });
+    }
+
+    return { cards };
   });
 
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
