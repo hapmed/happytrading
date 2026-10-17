@@ -598,7 +598,15 @@ export async function userRoutes(app: FastifyInstance) {
           detail: `${n} convertidas · comisión ${r?.totalServiceCharge ?? '?'}`,
         });
       } catch (e: any) {
-        results.push({ asset: dust.join(', '), ok: false, via: 'dust→BNB', detail: String(e?.message ?? 'dust falló').slice(0, 100) });
+        // El lote falla si UNA no cumple el mínimo → reintentamos una por una.
+        for (const a of dust) {
+          try {
+            const r = await client.dustConvert([a]);
+            results.push({ asset: a, ok: true, via: 'dust→BNB', detail: `convertida · comisión ${r?.totalServiceCharge ?? '?'}` });
+          } catch (e2: any) {
+            results.push({ asset: a, ok: false, via: 'dust→BNB', detail: String(e2?.message ?? 'dust falló').slice(0, 90) });
+          }
+        }
       }
     }
     await logEvent(req.user.sub, `🧹 Barrido de monedas atoradas: ${before.stuck.length} detectadas`, 'info');
