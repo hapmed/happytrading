@@ -1911,6 +1911,28 @@ a:hover {
 
 /* ── Bóveda: olla de dinero 8-bit ─────────────────────────────────── */
 .pot-wrap { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+
+/* GIF de la bóveda (Don Cangrejo abrazando la ganancia) */
+.vault-gif-wrap {
+  position: relative;
+  flex: none;
+  width: 200px;
+  max-width: 100%;
+  border: 4px solid var(--panel-border);
+  box-shadow: 6px 6px 0 var(--panel-shadow);
+  overflow: hidden;
+  background: #0a0a14;
+  animation: bob 3.2s ease-in-out infinite;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.vault-gif { display: block; width: 100%; height: auto; }
+.vault-gif-wrap.near {
+  border-color: var(--green);
+  box-shadow: 0 0 22px rgba(0, 255, 157, 0.6), 6px 6px 0 var(--panel-shadow);
+}
+@media (max-width: 600px) {
+  .vault-gif-wrap { width: 158px; }
+}
 .pot {
   position: relative;
   width: 130px;
