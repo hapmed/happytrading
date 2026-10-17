@@ -42,40 +42,68 @@ async function clearPending(userId: string, symbol: string): Promise<void> {
  * ROTACIÓN: vende una posición en hold para fondear una oportunidad de compra.
  * Prioriza vender la de mayor ganancia (o la más pequeña) que no sea la del par objetivo.
  */
-async function tryRotate(userId: string, excludeSymbol: string, client: ExchangeClient): Promise<number> {
-  const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 } } });
+/**
+ * Rota capital: vende posiciones para fondear una compra mejor.
+ *  - Normal: vende la posición con mejor relación ganancia/tamaño (no descapitaliza).
+ *  - Oportunidad IMPERDIBLE (`preferWorst`): vende primero las que MENOS ganan
+ *    (aunque sea con pérdida) y hasta `needed` para no dejar pasar la oferta.
+ */
+async function tryRotate(
+  userId: string,
+  excludeSymbol: string,
+  client: ExchangeClient,
+  opts: { preferWorst?: boolean; needed?: number } = {},
+): Promise<number> {
+  const positions = await prisma.position.findMany({ where: { userId, baseAmount: { gt: 0 }, reserved: false } });
   const others = positions.filter((p) => p.symbol !== excludeSymbol);
   if (!others.length) return 0;
 
-  let best: { symbol: string; qty: number; price: number; value: number; pnlPct: number; score: number } | null = null;
+  // Evalúa cada posición candidata (valor real, PnL y liquidez).
+  const cands: Array<{ symbol: string; qty: number; price: number; value: number; pnlPct: number }> = [];
   for (const p of others) {
     try {
       const t = await client.ticker(p.symbol);
       const price = Number(t.last ?? 0);
       const qty = Number(p.baseAmount);
       const value = qty * price;
-      if (value <= 0) continue;
+      if (value <= 0 || price <= 0) continue;
       const avg = Number(p.avgCostMxn);
       const pnlPct = avg > 0 ? ((price - avg) / avg) * 100 : 0;
-      const score = pnlPct + (value >= 20 ? 10 : 0);
-      if (!best || score > best.score) best = { symbol: p.symbol, qty, price, value, pnlPct, score };
+      cands.push({ symbol: p.symbol, qty, price, value, pnlPct });
     } catch {}
   }
-  if (!best) return 0;
+  if (!cands.length) return 0;
 
-  await prisma.instruction.create({
-    data: {
-      userId, symbol: best.symbol, side: 'SELL', trigger: 'immediate', triggerPrice: String(best.price),
-      quantity: String(best.qty), reason: `Rotar → ${excludeSymbol}`, status: 'PENDING',
-      expiresAt: new Date(Date.now() + 3600 * 1000),
-    },
-  });
-  await logEvent(
-    userId,
-    `🔄 Rotando: vendo ${best.symbol} (${best.pnlPct >= 0 ? '+' : ''}${best.pnlPct.toFixed(1)}%) para comprar ${excludeSymbol}`,
-    'warn',
+  // Imperdible → corta primero las perdedoras (menor PnL). Normal → la más rentable/grande.
+  cands.sort((a, b) =>
+    opts.preferWorst
+      ? a.pnlPct - b.pnlPct
+      : b.pnlPct + (b.value >= 20 ? 10 : 0) - (a.pnlPct + (a.value >= 20 ? 10 : 0)),
   );
-  return best.value;
+
+  const needed = opts.needed && opts.needed > 0 ? opts.needed : 0;
+  const maxSell = opts.preferWorst ? 4 : 1; // imperdible: vende varias si hace falta
+  let freed = 0;
+  let sold = 0;
+  for (const c of cands) {
+    if (sold >= maxSell) break;
+    if (needed > 0 && freed >= needed) break;
+    await prisma.instruction.create({
+      data: {
+        userId, symbol: c.symbol, side: 'SELL', trigger: 'immediate', triggerPrice: String(c.price),
+        quantity: String(c.qty), reason: `Rotar → ${excludeSymbol}${opts.preferWorst ? ' (imperdible)' : ''}`,
+        status: 'PENDING', expiresAt: new Date(Date.now() + 3600 * 1000),
+      },
+    });
+    await logEvent(
+      userId,
+      `🔄 Rotando: vendo ${c.symbol} (${c.pnlPct >= 0 ? '+' : ''}${c.pnlPct.toFixed(1)}%) para comprar ${excludeSymbol}${opts.preferWorst ? ' · ¡oportunidad imperdible!' : ''}`,
+      'warn',
+    );
+    freed += c.value;
+    sold++;
+  }
+  return freed;
 }
 
 /**
@@ -499,9 +527,9 @@ async function planForUser(userId: string): Promise<void> {
   const ranked: Array<{ symbol: string; vol: number }> = [];
   for (const sym of symbols) {
     try {
-      // Solo pares que ALCANCEN con el efectivo disponible (evita planes imposibles)
+      // Solo pares que ALCANCEN con holgura (evita comprar algo que luego no se pueda vender)
       const lim0 = limits.get(sym);
-      if (lim0 && lim0.minimumValue > cashRemaining) continue;
+      if (lim0 && lim0.minimumValue * 1.3 > cashRemaining) continue;
       const t = await client.ticker(sym);
       tickerCache.set(sym, t);
       const last = Number(t.last ?? 0);
@@ -673,6 +701,19 @@ async function planForUser(userId: string): Promise<void> {
         }
         const b = slE > 0 ? tpE / slE : 1;
         const kelly = b > 0 ? Math.max(0, (pWin * b - (1 - pWin)) / b) : 0;
+
+        // 🔥 OPORTUNIDAD IMPERDIBLE: barata + EV fuerte + spread bajo + confianza.
+        // Si aparece, el bot vende lo que tenga (aunque sea con pérdida) para no dejarla pasar.
+        const cheapDeep =
+          z <= -1.5 || Number(indicators?.bbPos ?? 100) <= 15 || Number(indicators?.rsi ?? 100) <= 30;
+        const imperdible = evPct >= 0.3 && cheapDeep && spreadPPct <= 1 && signal.confidence >= 0.5;
+        if (imperdible) {
+          await logEvent(
+            userId,
+            `🔥 OPORTUNIDAD IMPERDIBLE en ${symbol} (EV +${evPct.toFixed(2)}% · z=${z.toFixed(2)} · pos_bandas=${indicators?.bbPos}% · RSI=${indicators?.rsi} · spread ${spreadPPct.toFixed(2)}%) → vendo lo necesario para comprarla`,
+            'ok',
+          );
+        }
         await logEvent(
           userId,
           `🧮 ${symbol}: EV +${evPct.toFixed(2)}% · p=${(pWin * 100).toFixed(0)}% · Kelly ${(kelly * 100).toFixed(0)}% · spread ${spreadPPct.toFixed(2)}% → COMPRO`,
@@ -688,18 +729,30 @@ async function planForUser(userId: string): Promise<void> {
         const minValue = lim?.minimumValue ?? 0;
         const minAmount = lim?.minimumAmount ?? 0;
         const minPerTranche = Math.max(minValue, minAmount * entry);
+        // Margen 30%: garantiza que la posición siga siendo VENDIBLE aunque el precio caiga.
+        const minSellable = Math.max(1, minPerTranche * 1.3);
 
-        // Si no alcanza el efectivo, ROTA: vende una posición en hold para fondear esta oportunidad.
-        if (spend < Math.max(1, minPerTranche) && rotate) {
-          const freedValue = await tryRotate(userId, symbol, client);
-          if (freedValue > 0) spend = Math.min(maxOrder, freedValue);
+        // ROTA para fondear esta compra:
+        //  - Normal: solo si no alcanza el mínimo para operar.
+        //  - Imperdible: hasta llenar el tamaño objetivo (vende lo que sea, aunque pierda).
+        const target = imperdible ? maxOrder : minSellable;
+        if (spend < target && rotate) {
+          const freedValue = await tryRotate(userId, symbol, client, {
+            preferWorst: imperdible,
+            needed: target - spend,
+          });
+          if (freedValue > 0) spend = Math.min(maxOrder, spend + freedValue);
         }
-        if (spend < Math.max(1, minPerTranche)) {
-          await logEvent(userId, `Sin efectivo ni posiciones para rotar · ${symbol}`, 'warn');
+        if (spend < minSellable) {
+          await logEvent(
+            userId,
+            `⏭ ${symbol}: no alcanza para una posición vendible (mín ${minSellable.toFixed(2)} ${quote.toUpperCase()}) · se omite`,
+            'warn',
+          );
           continue;
         }
         let levels = dcaLevels;
-        if (minPerTranche > 0) levels = Math.max(1, Math.min(dcaLevels, Math.floor(spend / minPerTranche)));
+        if (minSellable > 0) levels = Math.max(1, Math.min(dcaLevels, Math.floor(spend / minSellable)));
         cashRemaining = Math.max(0, cashRemaining - spend);
         const per = spend / levels;
         const expires = new Date(Date.now() + PLAN_TTL_H * 3600 * 1000);

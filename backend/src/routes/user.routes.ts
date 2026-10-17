@@ -18,6 +18,56 @@ const THERMO_COINS = [
   'btc', 'eth', 'xrp', 'sol', 'ltc', 'trx', 'mana', 'ada', 'doge', 'avax', 'link', 'dot', 'atom', 'uni', 'aave',
 ];
 
+/**
+ * Detecta saldos que NO se pueden vender (por debajo del mínimo del exchange).
+ * Revisa cartera Spot + Funding y, para cada activo, si su valor alcanza el
+ * mínimo de orden de su par (X_quote). Los que no, quedan "atorados".
+ */
+async function analyzeStuck(client: any, quote: string) {
+  const [spot, funding, limits] = await Promise.all([
+    Promise.resolve().then(() => client?.spotBalance?.()).catch(() => []),
+    Promise.resolve().then(() => client?.fundingBalance?.()).catch(() => []),
+    getBookLimits(client, 'binance').catch(() => new Map()),
+  ]);
+  const SKIP = new Set([quote, 'usdt', 'usdc', 'busd', 'dai', 'fdusd', 'tusd', 'usdp', 'bnb', 'mxn']);
+  const acc = new Map<string, { qty: number; places: Set<string> }>();
+  const add = (asset: string, free: any, place: string) => {
+    const a = String(asset ?? '').toLowerCase();
+    const q = Number(free ?? 0);
+    if (!a || !(q > 0) || SKIP.has(a)) return;
+    const cur = acc.get(a) ?? { qty: 0, places: new Set<string>() };
+    cur.qty += q;
+    cur.places.add(place);
+    acc.set(a, cur);
+  };
+  for (const b of Array.isArray(spot) ? spot : []) add(b.currency, b.available, 'Spot');
+  for (const b of Array.isArray(funding) ? funding : []) add(b.currency, b.available, 'Funding');
+
+  const items: Array<{ asset: string; where: string; qty: number; value: number; sellable: boolean; reason: string }> = [];
+  for (const [a, v] of acc) {
+    const book = `${a}_${quote}`;
+    const lim: any = (limits as Map<string, any>).get(book);
+    let price = 0;
+    try {
+      price = Number((await client.ticker(book)).last ?? 0);
+    } catch {}
+    const value = v.qty * price;
+    let sellable = false;
+    let reason = '';
+    if (!lim) reason = `sin mercado ${book.toUpperCase()}`;
+    else if (!(price > 0)) reason = 'sin precio de venta';
+    else if (value < Number(lim.minimumValue ?? 0)) reason = `valor ${value.toFixed(4)} < mínimo ${lim.minimumValue}`;
+    else if (v.qty < Number(lim.minimumAmount ?? 0)) reason = `cantidad < mínimo ${lim.minimumAmount}`;
+    else {
+      sellable = true;
+      reason = 'se puede vender';
+    }
+    items.push({ asset: a.toUpperCase(), where: [...v.places].join('+'), qty: v.qty, value, sellable, reason });
+  }
+  items.sort((x, y) => y.value - x.value);
+  return { quote, items, stuck: items.filter((i) => !i.sellable), sellable: items.filter((i) => i.sellable) };
+}
+
 
 const tradingSchema = z.object({
   autoTrade: z.boolean().optional(),
@@ -499,6 +549,58 @@ export async function userRoutes(app: FastifyInstance) {
       invested,
       currentValue,
     };
+  });
+
+  // Monedas "atoradas": saldos que NO se pueden vender (por debajo del mínimo de Binance)
+  app.get('/stuck', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const quote = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    const client = await makeExchangeClient(me!);
+    return analyzeStuck(client as any, quote);
+  });
+
+  // Liquidar monedas atoradas: intenta venderlas (Convert) y, si no alcanzan,
+  // las convierte a BNB (dust). Sirve para recuperar lo que quedó por debajo del mínimo.
+  app.post('/stuck/clean', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const quote = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    const client: any = await makeExchangeClient(me!);
+    const before = await analyzeStuck(client, quote);
+    const results: Array<{ asset: string; ok: boolean; via: string; detail: string }> = [];
+    const dust: string[] = [];
+    for (const s of before.stuck) {
+      // Traer de Funding a Spot si hiciera falta (el dust se convierte desde Spot).
+      if (s.where.includes('Funding')) {
+        try {
+          await client.transfer('FUNDING_MAIN', s.asset, s.qty);
+        } catch {}
+      }
+      // 1) Vender por Convert (sirve si aún tiene algo de valor)
+      try {
+        await client.convert(s.asset, quote.toUpperCase(), Number(s.qty.toFixed(8)));
+        results.push({ asset: s.asset, ok: true, via: 'convert', detail: `vendido a ${quote.toUpperCase()}` });
+      } catch (e: any) {
+        dust.push(s.asset);
+        results.push({ asset: s.asset, ok: false, via: 'dust', detail: String(e?.message ?? 'convert falló').slice(0, 80) });
+      }
+    }
+    if (dust.length) {
+      try {
+        const r = await client.dustConvert(dust);
+        const n = Array.isArray(r?.transferResult) ? r.transferResult.length : 0;
+        results.push({
+          asset: dust.join(', '),
+          ok: true,
+          via: 'dust→BNB',
+          detail: `${n} convertidas · comisión ${r?.totalServiceCharge ?? '?'}`,
+        });
+      } catch (e: any) {
+        results.push({ asset: dust.join(', '), ok: false, via: 'dust→BNB', detail: String(e?.message ?? 'dust falló').slice(0, 100) });
+      }
+    }
+    await logEvent(req.user.sub, `🧹 Barrido de monedas atoradas: ${before.stuck.length} detectadas`, 'info');
+    const after = await analyzeStuck(client, quote);
+    return { stuck: before.stuck, results, sellableRestante: after.sellable, stuckRestante: after.stuck };
   });
 
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)

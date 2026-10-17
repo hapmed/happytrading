@@ -43,7 +43,11 @@ export class BinanceClient {
     }
     for (const [k, v] of Object.entries(entries)) {
       if (v === undefined || v === null) continue;
-      url.searchParams.set(k, String(v));
+      if (Array.isArray(v)) {
+        for (const item of v) url.searchParams.append(k, String(item));
+      } else {
+        url.searchParams.set(k, String(v));
+      }
     }
     if (signed) {
       const qs = url.searchParams.toString();
@@ -93,7 +97,7 @@ export class BinanceClient {
     await this.request('POST', '/sapi/v1/asset/transfer', { type, asset, amount: String(amount) }, true);
   }
 
-  /** Convierte entre activos (Binance Convert) — permite montos chicos (desde ~2 USDT). */
+  /** Convierte entre activos (Binance Convert) — permite montos chicos (desde ~0.5 USDT). */
   async convert(fromAsset: string, toAsset: string, fromAmount: number): Promise<any> {
     const q = await this.request<any>('POST', '/sapi/v1/convert/getQuote', {
       fromAsset,
@@ -102,6 +106,14 @@ export class BinanceClient {
     }, true);
     if (!q?.quoteId) throw new Error('Convert: sin cotización');
     return this.request<any>('POST', '/sapi/v1/convert/acceptQuote', { quoteId: q.quoteId }, true);
+  }
+
+  /**
+   * Convierte saldos pequeños ("dust") a BNB. Es la ÚNICA vía para liquidar
+   * monedas cuyo valor queda por debajo del mínimo de orden (no se pueden vender en Spot).
+   */
+  async dustConvert(assets: string[]): Promise<any> {
+    return this.request<any>('POST', '/sapi/v1/asset/dust', { asset: assets.map((a) => a.toUpperCase()) }, true);
   }
 
   // ── Saldos (Spot + Funding, para la valuación del portafolio) ──────
