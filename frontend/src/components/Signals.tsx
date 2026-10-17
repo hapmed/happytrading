@@ -24,7 +24,7 @@ export default function Signals({ signals }: { signals: any[] }) {
   const show = [...action, ...holds].slice(0, 10);
 
   return (
-    <Panel title="◈ ÚLTIMAS SEÑALES DE IA">
+    <Panel title="◈ LO QUE PIENSA LA IA">
       {/* Onda animada "en vivo" */}
       <div className="sig-wave">
         {Array.from({ length: 24 }).map((_, i) => (
@@ -33,11 +33,11 @@ export default function Signals({ signals }: { signals: any[] }) {
       </div>
 
       <div className="sig-summary">
-        <b>{action.length}</b> de acción · <b>{holds.length}</b> en HOLD · <span className="muted">1 fila por moneda</span>
+        <b>{action.length}</b> con ganas · <b>{holds.length}</b> en «meh» (HOLD) · <span className="muted">1 fila por moneda</span>
       </div>
 
       {latest.length === 0 ? (
-        <div className="muted center">Sin señales todavía.</div>
+        <div className="muted center">La IA aún no dice nada. Silencio sospechoso 🤫</div>
       ) : (
         <div className="sig-list">
           {show.map((s, i) => {

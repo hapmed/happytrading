@@ -4,11 +4,11 @@ import { api } from '../lib/api';
 import { Panel } from './Retro';
 
 const LABELS: Record<string, string> = {
-  reading_balance: 'LEYENDO EL MERCADO…',
-  ai_thinking: 'IA ANALIZANDO…',
-  placing_order: '¡OPERANDO!',
-  idle: 'VIGILANDO EL MERCADO',
-  error: 'RECUPERÁNDOSE…',
+  reading_balance: 'OLIENDO EL MERCADO… 👃',
+  ai_thinking: 'IA ESTRUJÁNDOSE EL CEREBRO… 🧠',
+  placing_order: '¡APRETANDO EL BOTÓN! 🎯',
+  idle: 'VIGILANDO COMO ÁGUILA 🦅',
+  error: 'TROPEZÓ… PERO SE LEVANTA 🩹',
 };
 
 function fmtDuration(ms: number): string {
@@ -66,18 +66,18 @@ export default function StatusBox() {
     <Panel title="◈ ESTADO DEL BOT" className={`statuspanel ${on ? 'auto-on' : 'auto-off'}`}>
       <div className={`livebar ${alive ? 'on' : 'off'}`}>
         <span className="livebar-led" />
-        <span className="livebar-title">TRABAJANDO PARA TI · 24/7</span>
-        <span className="livebar-state">{alive ? LABELS[state] ?? state : 'RECONECTANDO…'}</span>
+        <span className="livebar-title">CHAMBEANDO PARA TI · 24/7 🛠️</span>
+        <span className="livebar-state">{alive ? LABELS[state] ?? state : 'RECONECTANDO… (se cayó el internet 📶)'}</span>
         <span className="livebar-eq">
           {Array.from({ length: 8 }).map((_, i) => (
             <i key={i} style={{ animationDelay: `${i * 0.1}s` }} />
           ))}
         </span>
-        <span className="livebar-next">próxima pasada {remaining > 0 ? `${mm}:${String(ss).padStart(2, '0')}` : '¡ahora!'}</span>
+        <span className="livebar-next">otra vuelta en {remaining > 0 ? `${mm}:${String(ss).padStart(2, '0')}` : '¡ya merito!'}</span>
       </div>
 
       <div className="uptime">
-        ⏱ ACTIVO AHORA: <b>{uptime}</b> · TOTAL HISTÓRICO: <b>{totalUptime}</b>
+        ⏱ EN CHAMBA AHORA: <b>{uptime}</b> · SIN DORMIR EN TOTAL: <b>{totalUptime}</b>
       </div>
 
       
@@ -85,8 +85,8 @@ export default function StatusBox() {
       <button type="button" className={`auto-banner ${on ? 'on' : 'off'}`} onClick={toggle} disabled={busy} style={{ marginBottom: 0 }}>
         <span className="auto-dot" />
         <div className="auto-text">
-          <div className="auto-title">{on ? 'AUTO ACTIVADO' : 'AUTO DETENIDO'}</div>
-          <div className="auto-sub">{on ? 'El bot opera automáticamente en Binance' : 'El bot solo analiza, NO operará'}</div>
+          <div className="auto-title">{on ? 'AUTO ENCENDIDO' : 'AUTO APAGADO'}</div>
+          <div className="auto-sub">{on ? 'El bot compra y vende solo en Binance (ya sabe 😎)' : 'El bot está de brazos cruzados: no toca nada 🚫'}</div>
         </div>
         <div className="auto-switch">{on ? 'ON' : 'OFF'}</div>
       </button>

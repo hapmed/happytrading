@@ -31,7 +31,7 @@ export default function Instructions() {
         : `si precio ≥ ${price(r.triggerPrice)}`;
 
   return (
-    <Panel title="◈ PLAN DE LA IA → WORKER" className="plan-panel">
+    <Panel title="◈ LO QUE LA IA LE MANDA AL WORKER" className="plan-panel">
       {/* Flujo animado IA -> Worker */}
       <div className="plan-flow">
         <span className="plan-node">🧠 IA</span>
@@ -42,21 +42,21 @@ export default function Instructions() {
         </span>
         <span className="plan-node">⚙️ WORKER</span>
         <span className="plan-state">
-          {pending.length > 0 ? `${pending.length} en espera` : 'sin planes'}
+          {pending.length > 0 ? `${pending.length} en fila` : 'sin planear nada'}
         </span>
       </div>
 
       {/* Resumen rápido */}
       <div className="plan-summary">
-        <span className="plan-pill wait">⏳ {pending.length} esperando</span>
-        <span className="plan-pill ok">✔ {executed.length} ejecutadas</span>
-        <span className="plan-pill off">⌛ {expired.length} cerradas</span>
+        <span className="plan-pill wait">⏳ {pending.length} en fila</span>
+        <span className="plan-pill ok">✔ {executed.length} cumplidas</span>
+        <span className="plan-pill off">⌛ {expired.length} caducadas</span>
       </div>
 
       {/* Planes activos */}
       {pending.length === 0 ? (
         <div className="muted center" style={{ marginTop: 10 }}>
-          La IA no tiene planes activos ahora mismo.
+          La IA no tiene plan ahorita. Está pensando en grande 🤔
         </div>
       ) : (
         <div className="plan-list">

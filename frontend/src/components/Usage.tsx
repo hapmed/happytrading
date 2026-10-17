@@ -31,7 +31,7 @@ export default function Usage() {
   if (!names.length) names.push('omniroute', 'gemini', 'openrouter');
 
   return (
-    <Panel title="◈ IA · CONSUMO DE HOY (free tiers)">
+    <Panel title="◈ IA · CUÁNTO HA CHUPADO HOY (gratis)">
       <div className="usage-live">
         <span className="usage-dot" /> <b>EN VIVO</b> · se actualiza cada 15s
       </div>
@@ -69,7 +69,8 @@ export default function Usage() {
       })}
 
       <div className="muted center" style={{ fontSize: 15, marginTop: 8 }}>
-        Si un proveedor llega a su límite, el bot <b>salta al siguiente</b> (nunca se pasa del free tier).
+        Si un proveedor se queda sin gasolina, el bot <b>brinca al siguiente</b>. Nunca paga nada:
+        somos ratas orgullosas 🐭💸
       </div>
     </Panel>
   );

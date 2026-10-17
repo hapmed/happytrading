@@ -50,9 +50,9 @@ function Chart({ data, baseline }: { data: { t: string; v: number }[]; baseline:
   if (data.length < 2) {
     return (
       <div className="muted center" style={{ padding: 34 }}>
-        ◌ RECOLECTANDO DATOS...
+        ◌ JUNTANDO MIGAJAS DE DATOS...
         <br />
-        El gráfico se dibuja con cada pasada del bot. Pulsa ▶ EJECUTAR AHORA para añadir puntos.
+        Aquí se dibuja tu fortuna cada vez que el bot trabaja. Dale ▶ EJECUTAR AHORA para empezar la gráfica.
       </div>
     );
   }
@@ -159,36 +159,36 @@ export default function Portfolio({ simple = false }: { simple?: boolean }) {
         </div>
 
         <div className="stat-grid" style={{ marginTop: 14, marginBottom: 0 }}>
-          <Stat label="INVERTIDO" value={`$${fmt(aInv)}`} accent="yellow" />
-          <Stat label="VALOR ACTUAL" value={`$${fmt(aCur)}`} accent="cyan" />
-          <Stat label={gain ? 'GANANCIA' : 'PÉRDIDA'} value={`$${fmt(Math.abs(pnl))}`} accent={gain ? 'green' : 'red'} />
+          <Stat label="LE METISTE" value={`$${fmt(aInv)}`} accent="yellow" />
+          <Stat label="VALE HOY" value={`$${fmt(aCur)}`} accent="cyan" />
+          <Stat label={gain ? 'VAS GANANDO' : 'VAS PERDIENDO'} value={`$${fmt(Math.abs(pnl))}`} accent={gain ? 'green' : 'red'} />
           <Stat label="DEPÓSITOS" value={`$${fmt(Number(data?.netDeposits ?? 0))}`} accent="yellow" />
         </div>
         <div className="muted center" style={{ marginTop: 8, fontSize: 15 }}>
-          Los <b>depósitos por transferencia</b> no cuentan como ganancia.
+          Ojo: si te transfieres dinero, eso <b>NO es ganancia</b> — es meterle más al negocio 🧾
         </div>
 
         {!hasData && (
           <div className="muted center" style={{ marginTop: 12 }}>
-            Conecta Binance y pulsa ▶ EJECUTAR AHORA para empezar a ver tus ganancias.
+            Conecta Binance y dale ▶ EJECUTAR AHORA. (El bot no adivina, necesita llaves 🔑)
           </div>
         )}
       </Panel>
 
       {!simple && (
         <>
-          <Panel title="◈ VALOR DEL PORTAFOLIO (MXN)">
+          <Panel title="◈ CÓMO VA LA FORTUNA (MXN)">
             <Chart data={history} baseline={invested} />
             {invested > 0 && (
               <div className="muted center" style={{ marginTop: 6, fontFamily: 'var(--font-pixel)', fontSize: 8 }}>
-                ─ ─ LÍNEA AMARILLA = TU INVERSIÓN INICIAL
+                ─ ─ LÍNEA AMARILLA = TU INVERSIÓN (de aquí no bajes, por favor 🙏)
               </div>
             )}
           </Panel>
 
-          <Panel title="◈ TUS CRIPTOS">
+          <Panel title="◈ ¿QUÉ COMPRÓ EL BOT?">
             {holdings.length === 0 ? (
-              <div className="muted center">Aún sin datos de portafolio.</div>
+              <div className="muted center">Todavía no hay nada que dibujar 🎨</div>
             ) : (
               <Donut holdings={holdings} total={current} />
             )}

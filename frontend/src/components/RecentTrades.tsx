@@ -53,9 +53,9 @@ export default function RecentTrades({ trades }: { trades: any[] }) {
   const maxV = Math.max(0.0001, ...vals);
 
   return (
-    <Panel title="◈ HISTORIAL · COMPRADOS Y VENDIDOS">
+    <Panel title="◈ HISTORIAL DEL PING-PONG">
       {trades.length === 0 ? (
-        <div className="muted center">Sin operaciones todavía.</div>
+        <div className="muted center">Todavía no hay ni una compra. Paciencia, padawan 🧘</div>
       ) : (
         <>
           {/* Mini gráfica animada de las últimas operaciones */}

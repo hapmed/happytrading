@@ -27,9 +27,9 @@ export default function MarketThermometer() {
   const color = (s: string) => (s === 'BARATO' ? 'var(--green)' : s === 'CARO' ? 'var(--red)' : 'var(--yellow)');
 
   return (
-    <Panel title="◈ TERMÓMETRO DE MERCADO">
+    <Panel title="◈ TERMÓMETRO DEL MERCADO (en grados de caro)">
       <div className="thermo2-help">
-        🌡️ Mientras más <b>lleno/rojo</b>, más <b>caro</b>. Verde y vacío = <b>barato</b> (bueno para comprar).
+        🌡️ Lleno y <b>rojo</b> = carísimo (ni lo toques). Vacío y <b>verde</b> = ganga (¡cómpralo antes que yo!).
       </div>
       <div className="thermo2-list">
         {coins.slice(0, 10).map((c) => {
@@ -47,7 +47,7 @@ export default function MarketThermometer() {
             </div>
           );
         })}
-        {!coins.length && <div className="muted center">Cargando…</div>}
+        {!coins.length && <div className="muted center">Calentando el termómetro… 🌡️</div>}
       </div>
     </Panel>
   );

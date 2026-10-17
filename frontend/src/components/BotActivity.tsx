@@ -152,7 +152,7 @@ export default function BotActivity() {
       <div className="console" ref={consoleRef}>
         {events.length === 0 && (
           <div className="console-line muted">
-            Sin actividad todavía. Pulsa ▶ EJECUTAR AHORA para ver al bot en acción.
+            Aquí no pasa nada todavía. Dale ▶ EJECUTAR AHORA para ver al bot trabajar 🍿
           </div>
         )}
         {events.map((e, i) => (

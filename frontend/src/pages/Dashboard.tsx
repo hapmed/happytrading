@@ -55,7 +55,7 @@ export default function Dashboard() {
     <div>
       <div className="spread mb">
         <h2 style={{ fontFamily: 'var(--font-pixel)', fontSize: 14 }} className="floaty grad-text">
-          BIENVENIDO, {user?.name || user?.username || user?.email}
+          ¡HOLA, {user?.name || user?.username || user?.email}! VEAMOS SI YA SOMOS RICOS 💸
         </h2>
       </div>
 
@@ -78,7 +78,7 @@ export default function Dashboard() {
         {/* ─────────── DETALLE (opcional) ─────────── */}
         <div className="dash-full center" style={{ marginTop: 2 }}>
           <PixelButton onClick={() => setMore((v) => !v)}>
-            {more ? '▲ OCULTAR DETALLE' : '▼ VER MÁS DETALLE'}
+            {more ? '▲ OCULTAR Y HACERME EL SERIO' : '▼ VER MÁS (modo chismoso)'}
           </PixelButton>
         </div>
 
@@ -92,16 +92,16 @@ export default function Dashboard() {
             <Usage />
             <div className="dash-full">
               <div className="stat-grid" style={{ marginBottom: 0 }}>
-                <Stat label="OPERACIONES" value={trades.length} accent="green" />
+                <Stat label="PING-PONGS" value={trades.length} accent="green" />
                 <Stat label="COMPRAS" value={buys} accent="green" />
                 <Stat label="VENTAS" value={sells} accent="magenta" />
-                <Stat label="SEÑALES IA" value={signals.length} accent="yellow" />
+                <Stat label="SEÑALES DE LA IA" value={signals.length} accent="yellow" />
                 <Stat label="AUTO" value={user?.autoTrade ? 'ON' : 'OFF'} accent={user?.autoTrade ? 'green' : ''} />
               </div>
             </div>
             {balances.filter((b) => Number(b.available) > 0).length > 0 && (
               <div className="dash-full">
-                <Panel title="◈ SALDO EN BINANCE">
+                <Panel title="◈ ¿QUÉ HAY EN BINANCE?">
                   <div className="stat-grid" style={{ marginBottom: 0 }}>
                     {balances
                       .filter((b) => Number(b.available) > 0)

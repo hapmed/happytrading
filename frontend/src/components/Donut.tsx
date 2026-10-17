@@ -57,7 +57,7 @@ export default function Donut({ holdings, total }: { holdings: any[]; total: num
           ${Math.round(Number(total) || 0).toLocaleString('es-MX')}
         </text>
         <text x="50" y="58" className="donut-sub">
-          {holdings.length} activos
+          {holdings.length} cosas
         </text>
       </svg>
       <div className="donut-legend">

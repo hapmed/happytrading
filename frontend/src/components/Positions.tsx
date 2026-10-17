@@ -40,19 +40,19 @@ export default function Positions() {
   const totalPnl = rows.reduce((s, r) => s + Number(r.pnl || 0), 0);
 
   return (
-    <Panel title="◈ MIS POSICIONES · EVALUACIÓN">
+    <Panel title="◈ MIS MONEDAS (el bot opina)">
       <p className="muted mb" style={{ fontSize: 16 }}>
-        Monedas que el bot compró y <b>aún tienes</b>. El bot las evalúa cada rato y decide
-        <b> venderlas </b> (si están caras) o <b>mantenerlas</b> (si aún pueden subir).
+        Estas monedas las compró el bot y siguen en tu poder. Las checa a cada rato:
+        si están <b>caras</b>, las vende; si aún pueden subir, aguanta como campeón 💪
       </p>
 
       {rows.length === 0 ? (
-        <div className="muted center">Aún no hay posiciones abiertas.</div>
+        <div className="muted center">Cero monedas por ahora. El bot está en modo cazador 🎯</div>
       ) : (
         <>
           <div className="stat-grid" style={{ marginBottom: 16 }}>
-            <Stat label="EN POSICIONES" value={`$${money(totalValue)}`} accent="cyan" />
-            <Stat label={totalPnl >= 0 ? 'GANANCIA' : 'PÉRDIDA'} value={`${totalPnl >= 0 ? '+' : '−'}$${money(Math.abs(totalPnl))}`} accent={totalPnl >= 0 ? 'green' : 'red'} />
+            <Stat label="EN MONEDAS" value={`$${money(totalValue)}`} accent="cyan" />
+            <Stat label={totalPnl >= 0 ? 'VAS GANANDO' : 'VAS PERDIENDO'} value={`${totalPnl >= 0 ? '+' : '−'}$${money(Math.abs(totalPnl))}`} accent={totalPnl >= 0 ? 'green' : 'red'} />
           </div>
 
           <div className="pos-list">
@@ -102,7 +102,7 @@ export default function Positions() {
 
       {(review.home || review.pepe || review.xno) && (
         <p className="muted" style={{ fontSize: 14, marginTop: 12 }}>
-          Polvo no vendible (se deja):{' '}
+          Polvo cósmico que se queda ahí (ni Binance lo quiere):{' '}
           {['home', 'pepe', 'xno'].filter((k) => review[k]).map((k) => k.toUpperCase()).join(' · ')}
         </p>
       )}
