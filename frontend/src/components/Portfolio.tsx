@@ -66,6 +66,9 @@ function Chart({ data, baseline }: { data: { t: string; v: number }[]; baseline:
   const area = `${line} L${x(data.length - 1).toFixed(1)},${h - pad} L${x(0).toFixed(1)},${h - pad} Z`;
   const baseY = baseline > 0 ? y(baseline) : null;
 
+  const lastX = x(data.length - 1);
+  const lastY = y(data[data.length - 1].v);
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="chart" preserveAspectRatio="none">
       <defs>
@@ -79,9 +82,15 @@ function Chart({ data, baseline }: { data: { t: string; v: number }[]; baseline:
       ))}
       <path d={area} fill="url(#areaGrad)" />
       <path d={line} fill="none" stroke="#00ff9d" strokeWidth="3" className="chart-line" />
+      {/* ✨ El "cometa" recorre la línea en bucle (el dinero moviéndose) */}
+      <path d={line} fill="none" stroke="#eafff5" strokeWidth="4" className="chart-comet" vectorEffect="non-scaling-stroke" />
+      {/* 🎯 Línea de escaneo que barre de izquierda a derecha */}
+      <rect className="chart-scan" x={pad} y={pad} width="2" height={h - 2 * pad} fill="#00ff9d" />
       {baseY != null && (
         <line x1={pad} x2={w - pad} y1={baseY} y2={baseY} stroke="#ffe600" strokeWidth="2" strokeDasharray="7 7" />
       )}
+      {/* 💓 Punto actual que late */}
+      <circle cx={lastX} cy={lastY} r="6" fill="#00ff9d" className="chart-end" />
     </svg>
   );
 }

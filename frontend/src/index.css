@@ -1330,6 +1330,90 @@ a:hover {
   .mascot-img { width: 108px; }
 }
 
+/* ---------- El bot explica (1 párrafo) ---------- */
+.explain-text {
+  font-family: var(--font-term);
+  font-size: 20px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.explain-hl {
+  color: var(--yellow);
+  font-family: var(--font-term);
+  text-shadow: 0 0 8px rgba(255, 230, 0, 0.35);
+}
+
+/* ---------- COMPRADO vs VENDIDO (con resultado) ---------- */
+.moneyflow {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 190px;
+  padding: 18px 6px 0;
+  background: #04040a;
+  border: 3px solid var(--panel-border);
+  overflow-x: auto;
+}
+.mf-col {
+  flex: 1 0 26px;
+  min-width: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+.mf-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.mf-bar {
+  width: 78%;
+  border: 2px solid #000;
+  transform-origin: bottom;
+  animation: mfGrow 0.5s ease both;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.mf-buy { background: linear-gradient(180deg, #00e5ff, #007a99); }
+.mf-win { background: linear-gradient(180deg, #00ff9d, #00a05f); }
+.mf-loss { background: linear-gradient(180deg, #ff4d4d, #a01c1c); }
+.mf-pct {
+  position: absolute;
+  top: -15px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  white-space: nowrap;
+}
+.mf-pct.up { color: var(--green); }
+.mf-pct.down { color: var(--red); }
+.mf-name {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--muted);
+  margin-top: 4px;
+  white-space: nowrap;
+}
+.mf-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-family: var(--font-term);
+  font-size: 16px;
+  color: var(--muted);
+}
+.mf-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.mf-dot { display: inline-block; width: 12px; height: 12px; border: 2px solid #000; }
+@keyframes mfGrow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
 /* ---------- Banner AUTO (verde/gris) ---------- */
 .auto-banner {
   width: 100%;
@@ -1463,6 +1547,39 @@ a:hover {
 /* ---------- Gráfica ---------- */
 .chart { width: 100%; height: 200px; display: block; }
 .chart-line { stroke-dasharray: 4000; stroke-dashoffset: 4000; animation: draw 1.8s ease forwards; }
+
+/* Gráfica viva: cometa en loop + escaneo + punto que late */
+.chart-comet {
+  stroke-dasharray: 60 6000;
+  stroke-dashoffset: 6060;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(0, 255, 157, 0.9));
+  animation: cometRun 4.5s linear infinite;
+}
+.chart-scan {
+  opacity: 0.35;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 157, 0.8));
+  animation: scanX 6s linear infinite;
+}
+.chart-end {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: endPulse 1.5s ease-in-out infinite;
+}
+@keyframes cometRun {
+  from { stroke-dashoffset: 6060; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes scanX {
+  0% { transform: translateX(0); opacity: 0; }
+  12% { opacity: 0.4; }
+  88% { opacity: 0.4; }
+  100% { transform: translateX(560px); opacity: 0; }
+}
+@keyframes endPulse {
+  0%, 100% { r: 5; opacity: 0.85; }
+  50% { r: 9; opacity: 1; }
+}
 @keyframes draw {
   to { stroke-dashoffset: 0; }
 }

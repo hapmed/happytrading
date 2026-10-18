@@ -2,44 +2,40 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Panel } from './Retro';
 
-interface Card {
-  id: string;
-  emoji: string;
-  title: string;
-  text: string;
-  mood: string;
-}
-
+/**
+ * El bot explica, en español simple, POR QUÉ hizo lo que hizo:
+ * qué compró/vendió, por qué, y qué espera que pase.
+ */
 export default function Drama() {
-  const [cards, setCards] = useState<Card[]>([]);
+  const [text, setText] = useState('');
 
   useEffect(() => {
     const load = () =>
-      api('/me/drama')
-        .then((d: any) => setCards(d?.cards ?? []))
+      api('/me/explain')
+        .then((d: any) => setText(d?.text ?? ''))
         .catch(() => {});
     load();
-    const id = setInterval(load, 15000);
+    const id = setInterval(load, 10000);
     return () => clearInterval(id);
   }, []);
 
+  // Resalta los nombres de monedas y los números para que se lea fácil.
+  const pretty = (t: string) =>
+    t
+      .split(/(\b[A-Z]{2,6}\b|\+?\d+\.\d+%|−\d+\.\d+%)/g)
+      .map((part, i) =>
+        /^[A-Z]{2,6}$/.test(part) || /%$/.test(part) ? (
+          <b className="explain-hl" key={i}>
+            {part}
+          </b>
+        ) : (
+          <React.Fragment key={i}>{part}</React.Fragment>
+        ),
+      );
+
   return (
-    <Panel title="📺 ¿QUÉ ONDA CON MI DINERO?">
-      <p className="muted mb" style={{ fontSize: 16 }}>
-        El <b>chismógrafo</b> del bot: te explica con humor cuando pasan cosas raras
-        (y por qué <b>casi nunca</b> son pérdidas de verdad).
-      </p>
-      <div className="drama-list">
-        {cards.map((c) => (
-          <div className={`drama-card drama-${c.mood}`} key={c.id}>
-            <div className="drama-emoji">{c.emoji}</div>
-            <div style={{ minWidth: 0 }}>
-              <div className="drama-title">{c.title}</div>
-              <div className="drama-text">{c.text}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+    <Panel title="◈ ¿QUÉ ONDA CON MI DINERO?">
+      <p className="explain-text">{text ? pretty(text) : 'Consultando al cerebro del bot… 🧠'}</p>
     </Panel>
   );
 }

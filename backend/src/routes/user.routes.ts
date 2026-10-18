@@ -929,6 +929,71 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── EL BOT EXPLICA (en simple) por qué hizo lo que hizo ─────────────
+  app.get('/explain', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const quote = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    const tp = me?.takeProfitPct ? Number(me.takeProfitPct) : 1;
+    const sl = me?.stopLossPct ? Number(me.stopLossPct) : 0.8;
+
+    const [positions, trades] = await Promise.all([
+      prisma.position.findMany({ where: { userId: req.user.sub, baseAmount: { gt: 0 } } }),
+      prisma.trade.findMany({ where: { userId: req.user.sub }, orderBy: { createdAt: 'desc' }, take: 8 }),
+    ]);
+
+    const out: string[] = [];
+    const nice = (s: string) => String(s).split('_')[0].toUpperCase();
+
+    // 1) Lo que tengo ahora y por qué
+    for (const p of positions.slice(0, 2)) {
+      const base = nice(p.symbol);
+      let price = 0;
+      let ind: any = null;
+      try {
+        price = Number((await client.ticker(p.symbol)).last ?? 0);
+        ind = await getIndicators(p.symbol.split('_')[0]);
+      } catch {}
+      const avg = Number(p.avgCostMxn);
+      const pnl = avg > 0 && price > 0 ? ((price - avg) / avg) * 100 : 0;
+      const porQue = ind
+        ? `la vi barata (z=${ind.zScore}, RSI=${ind.rsi})`
+        : 'la vi barata';
+      out.push(
+        `Compré ${base} porque ${porQue} y creo que puede subir dentro de la próxima hora. ` +
+          `Ahorita va ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%; el bot la venderá sola al +${tp.toFixed(1)}% ` +
+          `(o antes si sube y empieza a caer), y la corta si baja −${sl.toFixed(1)}%.`,
+      );
+    }
+
+    // 2) Si acabo de cerrar algo, por qué
+    if (!positions.length && trades.length) {
+      const t = trades[0];
+      const base = nice(t.symbol);
+      const motivo = String(t.reason ?? '');
+      const gano = /take-profit/i.test(motivo);
+      const perdio = /stop-loss/i.test(motivo);
+      const vendio = t.side === 'SELL';
+      if (vendio && gano) {
+        out.push(`Vendí ${base} porque ya había subido lo suficiente y preferí asegurar la ganancia antes de que se esfumara. Esa ganancia ya está guardada en la bóveda.`);
+      } else if (vendio && perdio) {
+        out.push(`Vendí ${base} para cortar la pérdida: el precio se cayó y no quise dejar que siguiera bajando. Mejor perder poquito que mucho.`);
+      } else if (t.side === 'BUY') {
+        out.push(`Compré ${base} porque la vi barata y creo que sube pronto; ya tiene su orden de venta lista.`);
+      }
+    }
+
+    // 3) Si no hay nada en juego
+    if (!out.length) {
+      out.push(
+        `Ahora mismo no tengo nada comprado: estoy buscando una moneda barata (con z muy negativo y RSI bajo) para entrar y salir rápido con ganancia. ` +
+          `En cuanto alguna se ponga en ganga, compro y le dejo su orden de venta al worker (que vigila cada 8 segundos).`,
+      );
+    }
+
+    return { text: out.join(' ') };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
