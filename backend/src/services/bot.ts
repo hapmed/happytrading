@@ -704,7 +704,10 @@ async function planForUser(userId: string): Promise<void> {
       const spread0 = mid0 > 0 && ask0 > bid0 ? ((ask0 - bid0) / mid0) * 100 : 0;
       const cheapEnough =
         indicators &&
-        (indicators.stat === 'BARATO' || Number(indicators.bbPos) <= 45 || Number(indicators.zScore) <= -0.25);
+        (indicators.stat === 'BARATO' ||
+          Number(indicators.zScore) <= -1.2 ||
+          Number(indicators.bbPos) <= 20 ||
+          Number(indicators.rsi) <= 32);
       if (cheapEnough && signal.action === 'HOLD' && spread0 <= 2 && last > 0) {
         signal.action = 'BUY';
         signal.confidence = Math.max(signal.confidence, 0.6);
@@ -755,18 +758,18 @@ async function planForUser(userId: string): Promise<void> {
         const tpE = takeProfitPct > 0 ? takeProfitPct : 1.5;
         const slE = stopLossPct > 0 ? stopLossPct : 1.5;
         const evPct = pWin * tpE - (1 - pWin) * slE;
-        if (evPct <= 0.05) {
-          await logEvent(userId, `🧮 ${symbol}: EV ${evPct.toFixed(2)}% ≤ 0 (p=${(pWin * 100).toFixed(0)}%) → no conviene`, 'info');
+        if (evPct <= 0.25) {
+          await logEvent(userId, `🧮 ${symbol}: EV ${evPct.toFixed(2)}% ≤ 0.25 (p=${(pWin * 100).toFixed(0)}%) → no conviene`, 'info');
           continue;
         }
         const b = slE > 0 ? tpE / slE : 1;
         const kelly = b > 0 ? Math.max(0, (pWin * b - (1 - pWin)) / b) : 0;
 
-        // 🔥 OPORTUNIDAD IMPERDIBLE: muy barata + EV fuerte + spread bajo + confianza alta.
-        // (Umbral alto a propósito: rotar cuesta comisiones, sólo vale la pena si es clara.)
+        // 🔥 IMPERDIBLE: barra ALTÍSIMA. Rotar cuesta comisiones + realizar pérdidas,
+        //    así que solo se rota si la oportunidad es excepcional (raro a propósito).
         const cheapDeep =
           z <= -1.5 || Number(indicators?.bbPos ?? 100) <= 15 || Number(indicators?.rsi ?? 100) <= 30;
-        const imperdible = evPct >= 0.5 && cheapDeep && spreadPPct <= 1 && signal.confidence >= 0.65;
+        const imperdible = evPct >= 1.2 && cheapDeep && spreadPPct <= 0.8 && signal.confidence >= 0.8;
         if (imperdible) {
           await logEvent(
             userId,
