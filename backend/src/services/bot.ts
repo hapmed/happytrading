@@ -762,11 +762,11 @@ async function planForUser(userId: string): Promise<void> {
         const b = slE > 0 ? tpE / slE : 1;
         const kelly = b > 0 ? Math.max(0, (pWin * b - (1 - pWin)) / b) : 0;
 
-        // 🔥 OPORTUNIDAD IMPERDIBLE: barata + EV fuerte + spread bajo + confianza.
-        // Si aparece, el bot vende lo que tenga (aunque sea con pérdida) para no dejarla pasar.
+        // 🔥 OPORTUNIDAD IMPERDIBLE: muy barata + EV fuerte + spread bajo + confianza alta.
+        // (Umbral alto a propósito: rotar cuesta comisiones, sólo vale la pena si es clara.)
         const cheapDeep =
           z <= -1.5 || Number(indicators?.bbPos ?? 100) <= 15 || Number(indicators?.rsi ?? 100) <= 30;
-        const imperdible = evPct >= 0.3 && cheapDeep && spreadPPct <= 1 && signal.confidence >= 0.5;
+        const imperdible = evPct >= 0.5 && cheapDeep && spreadPPct <= 1 && signal.confidence >= 0.65;
         if (imperdible) {
           await logEvent(
             userId,

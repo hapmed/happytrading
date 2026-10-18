@@ -39,7 +39,13 @@ async function applyPosition(
       create: { userId, symbol, baseAmount: String(newQty), avgCostMxn: String(newAvg), slPriceMxn: sl, tpPriceMxn: tp, peakPrice: String(newAvg) },
     });
   } else if (existing) {
-    await prisma.position.update({ where: key, data: { baseAmount: String(Math.max(0, Number(existing.baseAmount) - qty)) } });
+    const left = Math.max(0, Number(existing.baseAmount) - qty);
+    // Si lo que queda ya es polvo (no vendible), se borra la posición en vez de dejarla.
+    if (left * priceMxn < 1) {
+      await prisma.position.delete({ where: key }).catch(() => {});
+    } else {
+      await prisma.position.update({ where: key, data: { baseAmount: String(left) } });
+    }
   }
 }
 
@@ -340,9 +346,19 @@ export async function runExecutorAll(): Promise<void> {
             status: 'PENDING', source: 'AI', reason: ins.reason ?? null, externalId: placed?.oid ? String(placed.oid) : null,
           },
         });
+        // Niveles SIEMPRE desde el PRECIO REAL de entrada (no el que propuso la IA):
+        // así el stop-loss nunca queda arriba del fill (vendía al instante por error).
+        const slPctU = user.stopLossPct ? Number(user.stopLossPct) : 0;
+        const tpPctU = user.takeProfitPct ? Number(user.takeProfitPct) : 0;
+        const slFinal = slPctU > 0
+          ? price * (1 - slPctU / 100)
+          : ins.slPriceMxn ? Number(ins.slPriceMxn) : undefined;
+        const tpFinal = tpPctU > 0
+          ? price * (1 + tpPctU / 100)
+          : ins.tpPriceMxn ? Number(ins.tpPriceMxn) : undefined;
         await applyPosition(user.id, ins.symbol, 'BUY', buyQty, price, {
-          sl: ins.slPriceMxn ? Number(ins.slPriceMxn) : undefined,
-          tp: ins.tpPriceMxn ? Number(ins.tpPriceMxn) : undefined,
+          sl: slFinal,
+          tp: tpFinal,
         });
         await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'EXECUTED', executedAt: new Date(), tradeId: trade.id } });
         // Descontar lo gastado para no sobre-comprar en la misma pasada.

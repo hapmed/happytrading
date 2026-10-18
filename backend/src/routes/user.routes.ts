@@ -945,8 +945,9 @@ export async function userRoutes(app: FastifyInstance) {
     const out: string[] = [];
     const nice = (s: string) => String(s).split('_')[0].toUpperCase();
 
-    // 1) Lo que tengo ahora y por qué
-    for (const p of positions.slice(0, 2)) {
+    // 1) Lo que tengo ahora y por qué (solo posiciones de verdad, no polvo)
+    for (const p of positions) {
+      if (out.length >= 2) break;
       const base = nice(p.symbol);
       let price = 0;
       let ind: any = null;
@@ -954,6 +955,8 @@ export async function userRoutes(app: FastifyInstance) {
         price = Number((await client.ticker(p.symbol)).last ?? 0);
         ind = await getIndicators(p.symbol.split('_')[0]);
       } catch {}
+      // Si vale menos de $1 USD es polvo: no vale la pena explicarlo.
+      if (!(Number(p.baseAmount) * price >= 1)) continue;
       const avg = Number(p.avgCostMxn);
       const pnl = avg > 0 && price > 0 ? ((price - avg) / avg) * 100 : 0;
       const porQue = ind
@@ -967,8 +970,8 @@ export async function userRoutes(app: FastifyInstance) {
     }
 
     // 2) Si acabo de cerrar algo, por qué
-    if (!positions.length && trades.length) {
-      const t = trades[0];
+    if (!out.length && trades.length) {
+      const t = trades.find((x) => !/rotar/i.test(String(x.reason ?? ''))) ?? trades[0];
       const base = nice(t.symbol);
       const motivo = String(t.reason ?? '');
       const gano = /take-profit/i.test(motivo);
