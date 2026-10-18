@@ -997,6 +997,85 @@ export async function userRoutes(app: FastifyInstance) {
     return { text: out.join(' ') };
   });
 
+  // ── ¿CUÁNDO VENDE O COMPRA? Estimación con la velocidad reciente del precio ──
+  app.get('/forecast', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const nice = (s: string) => String(s).split('_')[0].toUpperCase();
+
+    const [positions, plan] = await Promise.all([
+      prisma.position.findMany({ where: { userId: req.user.sub, baseAmount: { gt: 0 } } }),
+      prisma.instruction.findMany({ where: { userId: req.user.sub, status: 'PENDING' } }),
+    ]);
+
+    const items: any[] = [];
+
+    // 1) Lo que YA tenemos: cuándo vendería (TP) y cuándo cortaría (SL)
+    for (const p of positions) {
+      let price = 0;
+      let ind: any = null;
+      try {
+        price = Number((await client.ticker(p.symbol)).last ?? 0);
+        ind = await getIndicators(p.symbol.split('_')[0]);
+      } catch {}
+      if (!(Number(p.baseAmount) * price >= 1)) continue; // polvo fuera
+      const cost = Number(p.avgCostMxn);
+      const tp = p.tpPriceMxn ? Number(p.tpPriceMxn) : 0;
+      const sl = p.slPriceMxn ? Number(p.slPriceMxn) : 0;
+      const distTp = tp > 0 && price > 0 ? ((tp - price) / price) * 100 : 0;
+      const distSl = sl > 0 && price > 0 ? ((price - sl) / price) * 100 : 0;
+      const mom = Number(ind?.momentumPct ?? 0);
+      const atr = Number(ind?.atrPct ?? 0);
+      // Velocidad estimada (%/hora): el momentum de la última hora; si es plano, la volatilidad (ATR).
+      const speed = Math.max(0.05, Math.abs(mom) > 0.05 ? Math.abs(mom) : atr * Math.sqrt(12));
+      const eta = (d: number) => (d > 0 ? Math.round((d / speed) * 60) : 0);
+      items.push({
+        kind: 'POS',
+        symbol: p.symbol,
+        base: nice(p.symbol),
+        price,
+        cost,
+        tp,
+        sl,
+        distTp,
+        distSl,
+        pnlPct: cost > 0 ? ((price - cost) / cost) * 100 : 0,
+        valor: Number(p.baseAmount) * price,
+        etaTpMin: eta(distTp),
+        etaSlMin: eta(distSl),
+        speed,
+        momentum: mom,
+        aFavor: mom >= 0,
+      });
+    }
+
+    // 2) Lo que la IA planea: compras/ventas con su condición y su tiempo de validez
+    for (const i of plan) {
+      let price = 0;
+      try {
+        price = Number((await client.ticker(i.symbol)).last ?? 0);
+      } catch {}
+      const trg = Number(i.triggerPrice);
+      const dist = price > 0 && trg > 0 ? ((i.trigger === 'price_below' ? price - trg : trg - price) / price) * 100 : 0;
+      const mins = i.expiresAt ? Math.max(0, Math.round((new Date(i.expiresAt).getTime() - Date.now()) / 60000)) : null;
+      items.push({
+        kind: 'PLAN',
+        symbol: i.symbol,
+        base: nice(i.symbol),
+        side: i.side,
+        trigger: i.trigger,
+        triggerPrice: trg,
+        price,
+        dist,
+        monto: i.amountMxn ? Number(i.amountMxn) : null,
+        cantidad: i.quantity ? Number(i.quantity) : null,
+        expiresInMin: mins,
+      });
+    }
+
+    return { items };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });

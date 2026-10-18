@@ -1414,6 +1414,65 @@ a:hover {
   to { transform: scaleY(1); }
 }
 
+/* ---------- ¿Cuándo vende o compra? (corredores de precio) ---------- */
+.fc-row {
+  border: 3px solid var(--panel-border);
+  background: var(--bg2);
+  padding: 10px 12px;
+  box-shadow: 4px 4px 0 var(--panel-shadow);
+  margin-bottom: 12px;
+  animation: dramaIn 0.35s ease both;
+  min-width: 0;
+}
+.fc-plan { background: #0a0a18; }
+.fc-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fc-base { color: var(--cyan); font-family: var(--font-pixel); font-size: 12px; }
+.fc-track {
+  position: relative;
+  height: 18px;
+  margin: 10px 0 6px;
+  border: 2px solid var(--panel-border);
+  background: linear-gradient(90deg, rgba(255, 77, 77, 0.18), rgba(0, 255, 157, 0.18));
+  overflow: hidden;
+}
+.fc-zone-down {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 77, 77, 0.35);
+}
+.fc-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 4px;
+  background: #fff;
+  box-shadow: 0 0 10px #fff;
+  transform: translateX(-2px);
+  animation: fcMarkPulse 1.5s ease-in-out infinite;
+}
+@keyframes fcMarkPulse {
+  50% { opacity: 0.55; }
+}
+.fc-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-term);
+  font-size: 16px;
+  flex-wrap: wrap;
+}
+.fc-sl { color: var(--red); }
+.fc-tp { color: var(--green); text-align: right; }
+.fc-ends b { color: var(--yellow); }
+.fc-note {
+  font-family: var(--font-term);
+  font-size: 15px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
 /* ---------- Banner AUTO (verde/gris) ---------- */
 .auto-banner {
   width: 100%;

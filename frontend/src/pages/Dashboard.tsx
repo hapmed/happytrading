@@ -15,6 +15,7 @@ import MarketThermometer from '../components/MarketThermometer';
 import ProfitVault from '../components/ProfitVault';
 import Drama from '../components/Drama';
 import MoneyFlow from '../components/MoneyFlow';
+import Forecast from '../components/Forecast';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -71,6 +72,7 @@ export default function Dashboard() {
         </div>
         <ProfitVault />
         <Positions />
+        <Forecast />
         <div className="dash-full">
           <MoneyFlow trades={trades} />
         </div>
