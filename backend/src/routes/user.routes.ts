@@ -1076,6 +1076,25 @@ export async function userRoutes(app: FastifyInstance) {
     return { items };
   });
 
+  // Guardar un monto en la BÓVEDA (Spot → Funding). Sirve para pasar ganancias ya realizadas.
+  app.post('/vault/store', { preHandler: [authenticate] }, async (req, reply) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const quote = (me?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    const amount = Math.round(Number((req.body as any)?.amount ?? 0) * 100) / 100;
+    if (!(amount > 0.01)) return reply.code(400).send({ error: 'monto inválido' });
+    try {
+      const bal = await client.spotBalance();
+      const free = Number(bal?.find((b: any) => b.currency === quote)?.available ?? 0);
+      if (free < amount) return reply.code(400).send({ error: `no hay suficiente ${quote.toUpperCase()} (${free.toFixed(2)})` });
+      await client.transfer('MAIN_FUNDING', quote.toUpperCase(), amount);
+      await logEvent(req.user.sub, `🏺 Guardé ${amount.toFixed(2)} ${quote.toUpperCase()} de ganancia en la bóveda — ya no se mueve`, 'ok');
+      return { guardado: amount };
+    } catch (e: any) {
+      return reply.code(400).send({ error: String(e?.message ?? e).slice(0, 150) });
+    }
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
