@@ -499,7 +499,9 @@ export async function runExecutorAll(): Promise<void> {
     else {
       try {
         const ind = await getIndicators(pos.symbol.split('_')[0]);
-        if (ind && changePct >= -0.2) {
+        // "Vender caro" SOLO si ya hay ganancia suficiente para pagar comisiones.
+        // (0.2% ida+vuelta: vender en +0.0% o +0.1% es PERDER dinero.)
+        if (ind && changePct >= 0.5) {
           const caro =
             ind.stat === 'CARO' || Number(ind.zScore) >= 1 || Number(ind.bbPos) >= 80 || Number(ind.rsi) >= 72;
           const barato =
