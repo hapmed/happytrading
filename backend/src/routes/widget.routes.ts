@@ -40,19 +40,38 @@ export async function widgetRoutes(app: FastifyInstance) {
     const pnl = invested > 0 ? currentValue - invested : 0;
     const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
 
+    let client: any = null;
+    try {
+      client = await makeExchangeClient(user);
+    } catch {}
+
+    // 🏺 LA BÓVEDA: la ganancia que YA llevamos guardada (lo único que es "ganado" de verdad).
+    const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+    let vaultQuote = 0;
+    let vault = 0;
+    try {
+      const f = await client?.fundingBalance?.();
+      vaultQuote = Number(f?.find((b: any) => b.currency === quote)?.available ?? 0);
+      vault = quote === 'mxn' ? vaultQuote : vaultQuote * Number((await client?.ticker(`${quote}_mxn`))?.last ?? 0);
+    } catch {}
+    const goal = 50;
+    const totalWithdrawn = deps
+      .filter((d) => d.kind === 'WITHDRAWAL')
+      .reduce((s, d) => s + Number(d.amount), 0);
+    const totalEarned = totalWithdrawn + vault;
+    const progress = goal > 0 ? Math.min(1, vault / goal) : 0;
+
     let zone = 'NEUTRAL';
     try {
       zone = (await getRegime()).zone;
     } catch {}
 
     const mood =
-      invested > 0.01 && pnl > 0.01 ? 'profit' : invested > 0.01 && pnl < -0.01 ? 'loss' : zone === 'RISK_OFF' ? 'loss' : 'idle';
+      vault > 0.01 ? 'profit' : invested > 0.01 && pnl < -0.01 ? 'loss' : zone === 'RISK_OFF' ? 'loss' : 'idle';
 
     // Top 3 monedas más volátiles (para el widget) — con la cotización del usuario.
     let top: Array<{ symbol: string; vol: number }> = [];
     try {
-      const client = await makeExchangeClient(user);
-      const quote = (user.quote ?? 'mxn').toLowerCase();
       const vols: Array<{ symbol: string; vol: number }> = [];
       if (client)
         for (const base of VOL_CANDIDATES) {
@@ -78,6 +97,13 @@ export async function widgetRoutes(app: FastifyInstance) {
       zone,
       mood,
       top,
+      // 🏺 la bóveda (lo ganado)
+      vault,
+      vaultQuote,
+      goal,
+      progress,
+      totalEarned,
+      totalWithdrawn,
       updatedAt: new Date().toISOString(),
     };
   });
