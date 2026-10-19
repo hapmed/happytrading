@@ -71,6 +71,37 @@ function isAccountLimitError(err: unknown): boolean {
 }
 
 /**
+ * 🏺 Guarda en la BÓVEDA la ganancia de una venta ganadora.
+ * Nunca deja la bolsa de trabajo por debajo del colchón (para poder seguir operando).
+ */
+async function saveProfitToVault(
+  userId: string,
+  client: ExchangeClient,
+  user: { quote?: string | null },
+  symbol: string,
+  profit: number,
+  cashNow: number,
+): Promise<number> {
+  if (!(profit > 0.01)) return 0;
+  const q = quoteOf(user as any).toUpperCase();
+  const FLOOR = 2; // colchón mínimo (moneda de cotización) para seguir operando
+  const movable = Math.min(profit, Math.max(0, cashNow - FLOOR));
+  const amt = Number(movable.toFixed(2));
+  if (amt < 0.01) {
+    await logEvent(userId, `🏺 Ganancia de ${profit.toFixed(4)} ${q} en ${symbol}, pero la bolsa está baja: la dejo trabajando`, 'info');
+    return 0;
+  }
+  try {
+    await (client as any).transfer('MAIN_FUNDING', q, amt);
+    await logEvent(userId, `🏺 Ganancia ${symbol}: guardé ${amt.toFixed(2)} ${q} en la bóveda — ya no se mueve (de ahí sale tu retiro a la CLABE)`, 'ok');
+    return amt;
+  } catch (err) {
+    await logEvent(userId, `No pude guardar la ganancia de ${symbol}: ${(err as Error).message.slice(0, 60)}`, 'warn');
+    return 0;
+  }
+}
+
+/**
  * Sin MXN suficiente: VENDE la posición más rentable (o la que alcance) para fondear la compra.
  * Sacrifica la posición actual para no perder una mejor oportunidad (la estrategia siempre busca ganar).
  */
@@ -385,7 +416,16 @@ export async function runExecutorAll(): Promise<void> {
             status: 'PENDING', source: 'AI', reason: ins.reason ?? null, externalId: placed?.oid ? String(placed.oid) : null,
           },
         });
+        const posRow = await prisma.position.findUnique({
+          where: { userId_symbol: { userId: ins.userId, symbol: ins.symbol } },
+        });
+        const avgCostS = posRow ? Number(posRow.avgCostMxn) : 0;
         await applyPosition(user.id, ins.symbol, 'SELL', qty, price);
+        // 🏺 Ganancia de la venta → bóveda.
+        const gainS = avgCostS > 0 ? (price - avgCostS) * qty : 0;
+        if (gainS > 0) {
+          await saveProfitToVault(user.id, client, user, ins.symbol, gainS, (mxnMap.get(user.id) ?? 0) + price * qty);
+        }
         await prisma.instruction.update({ where: { id: ins.id }, data: { status: 'EXECUTED', executedAt: new Date(), tradeId: trade.id } });
         soldKeys.add(`${user.id}:${ins.symbol}`);
         await queueNotification(user.id, 'TRADE', `SELL ${ins.symbol} (plan IA)`, `${ins.reason ?? ''} @ ${price}`);
@@ -495,6 +535,11 @@ export async function runExecutorAll(): Promise<void> {
         },
       });
       await applyPosition(user.id, pos.symbol, 'SELL', qty, price);
+      // 🏺 Si la venta fue GANADORA, su ganancia se va derechito a la bóveda.
+      const gainP = (price - avg) * qty;
+      if (gainP > 0) {
+        await saveProfitToVault(user.id, client, user, pos.symbol, gainP, (mxnMap.get(user.id) ?? 0) + price * qty);
+      }
       soldKeys.add(`${user.id}:${pos.symbol}`);
       await prisma.signal.create({
         data: { userId: user.id, symbol: pos.symbol, action: 'SELL', confidence: 1, reasoning: reason, tokensUsed: 0, latencyMs: 0, executed: true },
