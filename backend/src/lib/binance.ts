@@ -165,10 +165,15 @@ export class BinanceClient {
   }
 
   // ── Saldos (Spot + Simple Earn + Funding, para la valuación) ───────
-  async balance(): Promise<Array<{ currency: string; available: string; locked: string; total: string }>> {
+  // `funding: false` deja FUERA la bóveda (cartera Funding) → así el dinero
+  // que "se mueve" se ve separado de lo que ya está guardado.
+  async balance(opts: { funding?: boolean } = {}): Promise<Array<{ currency: string; available: string; locked: string; total: string }>> {
+    const includeFunding = opts.funding !== false;
     const [spot, funding, earn] = await Promise.all([
       this.request<{ balances: Array<{ asset: string; free: string; locked: string }> }>('GET', '/api/v3/account', {}, true),
-      this.request<any>('POST', '/sapi/v1/asset/get-funding-asset', {}, true).catch(() => []),
+      includeFunding
+        ? this.request<any>('POST', '/sapi/v1/asset/get-funding-asset', {}, true).catch(() => [])
+        : Promise.resolve([]),
       this.earnBalance().catch(() => []),
     ]);
     const map = new Map<string, { free: number; locked: number }>();

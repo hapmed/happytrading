@@ -1126,14 +1126,30 @@ export async function userRoutes(app: FastifyInstance) {
 
     const last = historyRows[historyRows.length - 1];
     const currentValue = live ? live.currentValue : last ? Number(last.totalMxn) : 0;
+
+    // 🏺 La bóveda va APARTE: es dinero ya guardado, no el que está operando.
+    let vault = 0;
+    try {
+      const client: any = await makeExchangeClient(user!);
+      const quote = (user?.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+      const f = await client?.fundingBalance?.();
+      const fq = Number(f?.find((b: any) => b.currency === quote)?.available ?? 0);
+      vault = quote === 'mxn' ? fq : fq * Number((await client?.ticker(`${quote}_mxn`))?.last ?? 0);
+    } catch {}
+
     const holdings = live ? live.holdings : ((last?.holdings as any) ?? []);
-    const pnl = invested > 0 ? currentValue - invested : 0;
+    const totalValue = currentValue + vault; // dinero que se mueve + lo apartado
+    const pnl = invested > 0 ? totalValue - invested : 0;
     const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+    if (history.length) history[history.length - 1] = { t: history[history.length - 1].t, v: totalValue };
+    else history.push({ t: live?.updatedAt ?? new Date().toISOString(), v: totalValue });
 
     return {
       invested,
       netDeposits,
-      currentValue,
+      currentValue, // solo lo que está operando (SIN bóveda)
+      vault, // 🏺 apartado
+      totalValue, // operando + bóveda
       pnl,
       pnlPct,
       holdings,

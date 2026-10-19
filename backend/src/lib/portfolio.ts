@@ -92,7 +92,7 @@ export async function getLiveValuation(userId: string): Promise<LiveValuation | 
   const client = await makeExchangeClient(user);
   if (!client) return null;
 
-  const balances = await client.balance();
+  const balances = await client.balance({ funding: false }); // la bóveda va aparte
   const val = await valuePortfolio(client, balances);
   const result: LiveValuation = {
     currentValue: val.totalMxn,

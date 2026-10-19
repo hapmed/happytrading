@@ -123,6 +123,7 @@ export default function Portfolio({ simple = false }: { simple?: boolean }) {
 
   const invested = Number(data?.invested ?? 0);
   const current = Number(data?.currentValue ?? 0);
+  const vault = Number(data?.vault ?? 0);
   const pnl = Number(data?.pnl ?? 0);
   const pnlPct = Number(data?.pnlPct ?? 0);
   const holdings: any[] = data?.holdings ?? [];
@@ -169,11 +170,14 @@ export default function Portfolio({ simple = false }: { simple?: boolean }) {
 
         <div className="stat-grid" style={{ marginTop: 14, marginBottom: 0 }}>
           <Stat label="LE METISTE" value={`$${fmt(aInv)}`} accent="yellow" />
-          <Stat label="VALE HOY" value={`$${fmt(aCur)}`} accent="cyan" />
+          <Stat label="OPERANDO" value={`$${fmt(aCur)}`} accent="cyan" />
+          <Stat label="EN LA BÓVEDA 🏺" value={`$${fmt(vault)}`} accent="green" />
           <Stat label={gain ? 'VAS GANANDO' : 'VAS PERDIENDO'} value={`$${fmt(Math.abs(pnl))}`} accent={gain ? 'green' : 'red'} />
-          <Stat label="DEPÓSITOS" value={`$${fmt(Number(data?.netDeposits ?? 0))}`} accent="yellow" />
         </div>
         <div className="muted center" style={{ marginTop: 8, fontSize: 15 }}>
+          <b>Operando</b> = dinero que está trabajando · <b>Bóveda</b> = ya ganado y guardado (no se mueve) 🏺
+        </div>
+        <div className="muted center" style={{ marginTop: 4, fontSize: 15 }}>
           Ojo: si te transfieres dinero, eso <b>NO es ganancia</b> — es meterle más al negocio 🧾
         </div>
 
