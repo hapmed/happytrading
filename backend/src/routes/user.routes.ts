@@ -1124,62 +1124,41 @@ export async function userRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as { amount?: number };
     const amountMxn = Math.round(Number(body.amount ?? 50) * 100) / 100;
     if (!(amountMxn >= 50)) return reply.code(400).send({ error: 'Mínimo 50 MXN' });
-    try {
-      const client: any = await makeExchangeClient(user);
-      if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
-      const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+     try {
+       const client: any = await makeExchangeClient(user);
+       if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
 
-      // 0) Si ya hay MXN en Spot (≥50), intenta retirar directo.
-      try {
-        const sp0 = await client.spotBalance();
-        const mxnAvail = Number(sp0?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-        if (mxnAvail >= amountMxn) {
-          const w = await client.fiatWithdrawMxn({
-            amountMxn,
-            clabe,
-            beneficiary: user.payoutBeneficiary,
-            bank: user.payoutBank ?? undefined,
-          });
-          await prisma.deposit.create({
-            data: { userId: user.id, currency: 'mxn', amount: String(amountMxn), kind: 'WITHDRAWAL', note: `binance-spei-manual:${w?.orderId ?? w?.id ?? 'retiro'}` },
-          });
-          await logEvent(user.id, `🏦 Retiro manual a tu CLABE: $${amountMxn.toFixed(2)} MXN`, 'ok');
-          return { ok: true, amountMxn, withdrawal: w };
-        }
-      } catch {}
+       // 1) Transferir 50 MXN Spot -> Funding (el retiro SPEI parece sacar de Funding)
+       try {
+         await client.transfer('MAIN_FUNDING', 'MXN', amountMxn);
+         await new Promise((r) => setTimeout(r, 2000));
+       } catch {}
 
-      // 1) El retiro SPEI parece sacar de Funding: transfiere 50 MXN Spot -> Funding.
-      let movedToFunding = false;
-      try {
-        await client.transfer('MAIN_FUNDING', 'MXN', amountMxn);
-        movedToFunding = true;
-        await new Promise((r) => setTimeout(r, 2000));
-      } catch {}
-      // 2) Retirar MXN por SPEI a la CLABE
-      try {
-        const w = await client.fiatWithdrawMxn({
-          amountMxn,
-          clabe,
-          beneficiary: user.payoutBeneficiary,
-          bank: user.payoutBank ?? undefined,
-        });
-        await prisma.deposit.create({
-          data: { userId: user.id, currency: 'mxn', amount: String(amountMxn), kind: 'WITHDRAWAL', note: `binance-spei-manual:${w?.orderId ?? w?.id ?? 'retiro'}` },
-        });
-        await logEvent(user.id, `🏦 Retiro manual a tu CLABE: $${amountMxn.toFixed(2)} MXN`, 'ok');
-        // Limpiar: regresar lo que sobró Funding -> Spot
-        try {
-          const f = await client.fundingBalance();
-          const fq = Number(f?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
-          if (fq > 0.01) await client.transfer('FUNDING_MAIN', 'MXN', Number(fq.toFixed(2)));
-        } catch {}
-        return { ok: true, amountMxn, withdrawal: w };
-      } catch (e: any) {
-        // Limpiar: regresar 50 MXN Funding -> Spot
-        try { await client.transfer('FUNDING_MAIN', 'MXN', amountMxn); } catch {}
-        return reply.code(400).send({ error: String(e?.message ?? e).slice(0, 250) });
-      }
-    } catch (err: any) {
+       // 2) Retirar MXN por SPEI a la CLABE
+       try {
+         const w = await client.fiatWithdrawMxn({
+           amountMxn,
+           clabe,
+           beneficiary: user.payoutBeneficiary,
+           bank: user.payoutBank ?? undefined,
+         });
+         await prisma.deposit.create({
+           data: { userId: user.id, currency: 'mxn', amount: String(amountMxn), kind: 'WITHDRAWAL', note: `binance-spei-manual:${w?.orderId ?? w?.id ?? 'retiro'}` },
+         });
+         await logEvent(user.id, `🏦 Retiro manual a tu CLABE: $${amountMxn.toFixed(2)} MXN`, 'ok');
+         // Limpiar: regresar lo que sobró Funding -> Spot
+         try {
+           const f = await client.fundingBalance();
+           const fq = Number(f?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+           if (fq > 0.01) await client.transfer('FUNDING_MAIN', 'MXN', Number(fq.toFixed(2)));
+         } catch {}
+         return { ok: true, amountMxn, withdrawal: w };
+       } catch (e: any) {
+         // Limpiar: regresar 50 MXN Funding -> Spot
+         try { await client.transfer('FUNDING_MAIN', 'MXN', amountMxn); } catch {}
+         return reply.code(400).send({ error: String(e?.message ?? e).slice(0, 250) });
+       }
+
       // Limpieza por si algo quedó a medias
       try { await client.transfer('FUNDING_MAIN', 'MXN', amountMxn); } catch {}
       return reply.code(400).send({ error: String(err?.message ?? err).slice(0, 250) });
