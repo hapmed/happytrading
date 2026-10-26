@@ -140,15 +140,18 @@ export class BinanceClient {
     }));
   }
 
-  /** Convierte entre activos (Binance Convert) — permite montos chicos (desde ~0.5 USDT). */
+  /** Convierte entre activos (Binance Convert) — cotización caduca en segundos, por eso se acepta de inmediato. */
   async convert(fromAsset: string, toAsset: string, fromAmount: number): Promise<any> {
     const q = await this.request<any>('POST', '/sapi/v1/convert/getQuote', {
       fromAsset,
       toAsset,
       fromAmount: String(fromAmount),
     }, true);
-    if (!q?.quoteId) throw new Error('Convert: sin cotización');
-    return this.request<any>('POST', '/sapi/v1/convert/acceptQuote', { quoteId: q.quoteId }, true);
+    // La nueva API no devuelve quoteId; la cotización se identifica por validTimestamp.
+    const quoteId = q?.quoteId ?? q?.validTimestamp;
+    if (!quoteId) throw new Error('Convert: sin cotización');
+    // Aceptar de inmediato (la cotización caduca en segundos).
+    return this.request<any>('POST', '/sapi/v1/convert/acceptQuote', { quoteId: String(quoteId) }, true);
   }
 
   /**
