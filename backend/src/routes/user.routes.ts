@@ -1263,6 +1263,56 @@ export async function userRoutes(app: FastifyInstance) {
     return { results };
   });
 
+  // Diagnóstico: prueba el retiro SPEI con varias variantes (para encontrar el que funciona).
+  app.post('/payout-debug', { preHandler: [authenticate] }, async (req) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(user!);
+    const clabe = (user!.payoutClabe ?? '').replace(/\D/g, '');
+    const results: any[] = [];
+    const tryCall = async (name: string, fn: () => Promise<any>) => {
+      try {
+        results.push({ name, ok: true, result: await fn() });
+      } catch (e: any) {
+        results.push({ name, ok: false, error: String(e?.message ?? e).slice(0, 250) });
+      }
+    };
+
+    // 1) Ver dónde está el MXN
+    await tryCall('spot-balance', async () => {
+      const b = await client.spotBalance();
+      return b.find((x: any) => x.currency === 'mxn');
+    });
+    await tryCall('funding-balance', async () => {
+      const b = await client.fundingBalance();
+      return b.find((x: any) => x.currency === 'mxn');
+    });
+
+    // 2) Transferir 50 MXN Spot -> Funding
+    await tryCall('transfer-spot-to-funding', async () => {
+      await client.transfer('MAIN_FUNDING', 'MXN', 50);
+      return 'ok';
+    });
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // 3) Retirar (sin bank)
+    await tryCall('withdraw-no-bank', async () => {
+      return await client.fiatWithdrawMxn({ amountMxn: 50, clabe, beneficiary: user!.payoutBeneficiary });
+    });
+
+    // 4) Retirar el total disponible (50.11)
+    await tryCall('withdraw-full', async () => {
+      return await client.fiatWithdrawMxn({ amountMxn: 50.11, clabe, beneficiary: user!.payoutBeneficiary });
+    });
+
+    // 5) Limpiar: regresar Funding -> Spot
+    await tryCall('transfer-back', async () => {
+      await client.transfer('FUNDING_MAIN', 'MXN', 50);
+      return 'ok';
+    });
+
+    return { results };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });

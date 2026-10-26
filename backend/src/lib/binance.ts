@@ -338,30 +338,19 @@ export class BinanceClient {
       beneficiaryName: params.beneficiary,
       ...(params.bank ? { bankName: params.bank } : {}),
     });
-    // El retiro fiat (SPEI) de Binance requiere los parámetros en el BODY.
-    // La firma se calcula sobre los parámetros del body (ordenados) + timestamp.
-    const bodyParams: Record<string, any> = {
-      currency: 'MXN',
-      apiPaymentMethod: 'WITHDRAW_MEDA',
-      amount: params.amountMxn.toFixed(2),
-      accountInfo,
-      timestamp: Date.now(),
-      recvWindow: 5000,
-    };
-    const qs = new URLSearchParams(bodyParams).toString();
-    const signature = this.sign(qs);
-    const url = `https://api.binance.com/sapi/v2/fiat/withdraw?signature=${signature}`;
-    const body = new URLSearchParams(bodyParams).toString();
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'X-MBX-APIKEY': this.keyId, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-    const data: any = await res.json().catch(() => ({}));
-    if (!res.ok || (data && data.code && data.code < 0)) {
-      throw new Error(`Binance ${res.status}: ${data?.msg ?? JSON.stringify(data).slice(0, 150)}`);
-    }
-    return data;
+    // La firma se calcula sobre los parámetros (query string) — el estándar de Binance.
+    // Los parámetros van en el query string; el body queda vacío.
+    return this.request<any>(
+      'POST',
+      '/sapi/v2/fiat/withdraw',
+      {
+        currency: 'MXN',
+        apiPaymentMethod: 'WITHDRAW_MEDA',
+        amount: params.amountMxn.toFixed(2),
+        accountInfo,
+      },
+      true,
+    );
   }
 
   /** Historial de retiros fiat (MXN). */
