@@ -537,11 +537,13 @@ async function planForUser(userId: string): Promise<void> {
         const vaultMxnEq = fq * quoteToMxn;
         if (vaultMxnEq >= PAYOUT_MIN_MXN) {
           const amount = Math.round(vaultMxnEq * 100) / 100;
-          // Traer la bóveda (USDT) de Funding → Spot, convertir a MXN y retirar por SPEI.
+          // Traer la bóveda (USDT) de Funding → Spot, convertir a MXN vendiendo en el
+          // mercado spot (Convert API no funciona en esta cuenta) y retirar por SPEI.
           await (client as any).transfer('FUNDING_MAIN', quote.toUpperCase(), Number(fq.toFixed(4)));
           await new Promise((r) => setTimeout(r, 3000));
-          await (client as any).convert(quote.toUpperCase(), 'MXN', Number(fq.toFixed(2)));
-          await new Promise((r) => setTimeout(r, 2500));
+          const sellUsdt = Math.max(9, Math.ceil(fq)); // ≥150 MXN de mínimo de orden
+          await (client as any).placeOrder({ book: 'usdt_mxn', side: 'sell', type: 'market', major: String(sellUsdt) });
+          await new Promise((r) => setTimeout(r, 3000));
           const sp = await (client as any).spotBalance?.();
           const mxnSpot = Number(sp?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
           const send = Math.min(mxnSpot, amount);

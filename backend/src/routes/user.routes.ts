@@ -1128,10 +1128,11 @@ export async function userRoutes(app: FastifyInstance) {
       const client: any = await makeExchangeClient(user);
       if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
       const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
-      // 1) Convertir USDT → MXN (si no es MXN)
+      // 1) Convertir USDT → MXN vendiendo en el mercado spot USDTMXN
+      //    (Binance Convert no da quoteId en esta cuenta; el mercado spot sí funciona).
       if (quote !== 'mxn') {
-        const needUsdt = Number((amountMxn / 18.4).toFixed(2));
-        await client.convert(quote.toUpperCase(), 'MXN', needUsdt);
+        const sellUsdt = Math.max(9, Math.ceil((amountMxn + 5) / 18.4)); // ≥150 MXN de mínimo de orden
+        await client.placeOrder({ book: 'usdt_mxn', side: 'sell', type: 'market', major: String(sellUsdt) });
         await new Promise((r) => setTimeout(r, 3000));
       }
       // 2) Retirar MXN por SPEI a la CLABE
