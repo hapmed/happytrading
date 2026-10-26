@@ -1151,6 +1151,30 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // Diagnóstico: prueba la conversión USDT → MXN.
+  app.post('/convert-test', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const body = (req.body ?? {}) as { amount?: number };
+    const amt = Number(body.amount ?? 3);
+    const r: any = { tried: amt };
+    try {
+      const q = await client.raw('POST', '/sapi/v1/convert/getQuote', { fromAsset: 'USDT', toAsset: 'MXN', fromAmount: String(amt) }, true);
+      r.quote = q;
+      return r;
+    } catch (e: any) {
+      r.error = String(e?.message ?? e).slice(0, 250);
+      // Probar al revés
+      try {
+        const q2 = await client.raw('POST', '/sapi/v1/convert/getQuote', { fromAsset: 'MXN', toAsset: 'USDT', fromAmount: String(amt * 18.5) }, true);
+        r.reverse = q2;
+      } catch (e2: any) {
+        r.reverseError = String(e2?.message ?? e2).slice(0, 200);
+      }
+      return r;
+    }
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
