@@ -1179,6 +1179,11 @@ export async function userRoutes(app: FastifyInstance) {
         try { await client.transfer('FUNDING_MAIN', 'MXN', amountMxn); } catch {}
         return reply.code(400).send({ error: String(e?.message ?? e).slice(0, 250) });
       }
+    } catch (err: any) {
+      // Limpieza por si algo quedó a medias
+      try { await client.transfer('FUNDING_MAIN', 'MXN', amountMxn); } catch {}
+      return reply.code(400).send({ error: String(err?.message ?? err).slice(0, 250) });
+    }
   });
 
   // Diagnóstico: prueba varias formas de aceptar la conversión USDT → MXN.
