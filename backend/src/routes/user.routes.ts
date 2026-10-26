@@ -1128,6 +1128,26 @@ export async function userRoutes(app: FastifyInstance) {
       const client: any = await makeExchangeClient(user);
       if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
       const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+
+      // 0) Si ya hay MXN en Spot (≥50), retira directo (sin convertir).
+      try {
+        const sp0 = await client.spotBalance();
+        const mxnAvail = Number(sp0?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+        if (mxnAvail >= amountMxn) {
+          const w = await client.fiatWithdrawMxn({
+            amountMxn,
+            clabe,
+            beneficiary: user.payoutBeneficiary,
+            bank: user.payoutBank ?? undefined,
+          });
+          await prisma.deposit.create({
+            data: { userId: user.id, currency: 'mxn', amount: String(amountMxn), kind: 'WITHDRAWAL', note: `binance-spei-manual:${w?.orderId ?? w?.id ?? 'retiro'}` },
+          });
+          await logEvent(user.id, `🏦 Retiro manual a tu CLABE: $${amountMxn.toFixed(2)} MXN`, 'ok');
+          return { ok: true, amountMxn, withdrawal: w };
+        }
+      } catch {}
+
       // 1) Convertir USDT → MXN vendiendo en el mercado spot USDTMXN
       //    (Binance Convert no da quoteId en esta cuenta; el mercado spot sí funciona).
       if (quote !== 'mxn') {
