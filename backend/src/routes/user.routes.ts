@@ -1129,7 +1129,7 @@ export async function userRoutes(app: FastifyInstance) {
       if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
       const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
 
-      // 0) Si ya hay MXN en Spot (≥50), retira directo (sin convertir).
+      // 0) Si ya hay MXN en Spot (≥50), intenta retirar directo.
       try {
         const sp0 = await client.spotBalance();
         const mxnAvail = Number(sp0?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
@@ -1148,29 +1148,37 @@ export async function userRoutes(app: FastifyInstance) {
         }
       } catch {}
 
-      // 1) Convertir USDT → MXN vendiendo en el mercado spot USDTMXN
-      //    (Binance Convert no da quoteId en esta cuenta; el mercado spot sí funciona).
-      if (quote !== 'mxn') {
-        const sellUsdt = Math.max(9, Math.ceil((amountMxn + 5) / 18.4)); // ≥150 MXN de mínimo de orden
-        await client.placeOrder({ book: 'usdt_mxn', side: 'sell', type: 'market', major: String(sellUsdt) });
-        await new Promise((r) => setTimeout(r, 3000));
-      }
+      // 1) El retiro SPEI parece sacar de Funding: transfiere 50 MXN Spot -> Funding.
+      let movedToFunding = false;
+      try {
+        await client.transfer('MAIN_FUNDING', 'MXN', amountMxn);
+        movedToFunding = true;
+        await new Promise((r) => setTimeout(r, 2000));
+      } catch {}
       // 2) Retirar MXN por SPEI a la CLABE
-      const w = await client.fiatWithdrawMxn({
-        amountMxn,
-        clabe,
-        beneficiary: user.payoutBeneficiary,
-        bank: user.payoutBank ?? undefined,
-      });
-      await prisma.deposit.create({
-        data: { userId: user.id, currency: 'mxn', amount: String(amountMxn), kind: 'WITHDRAWAL', note: `binance-spei-manual:${w?.orderId ?? w?.id ?? 'retiro'}` },
-      });
-      await logEvent(user.id, `🏦 Retiro manual a tu CLABE: $${amountMxn.toFixed(2)} MXN`, 'ok');
-      return { ok: true, amountMxn, withdrawal: w };
-    } catch (err: any) {
-      return reply.code(400).send({ error: String(err?.message ?? err).slice(0, 250) });
-    }
-  });
+      try {
+        const w = await client.fiatWithdrawMxn({
+          amountMxn,
+          clabe,
+          beneficiary: user.payoutBeneficiary,
+          bank: user.payoutBank ?? undefined,
+        });
+        await prisma.deposit.create({
+          data: { userId: user.id, currency: 'mxn', amount: String(amountMxn), kind: 'WITHDRAWAL', note: `binance-spei-manual:${w?.orderId ?? w?.id ?? 'retiro'}` },
+        });
+        await logEvent(user.id, `🏦 Retiro manual a tu CLABE: $${amountMxn.toFixed(2)} MXN`, 'ok');
+        // Limpiar: regresar lo que sobró Funding -> Spot
+        try {
+          const f = await client.fundingBalance();
+          const fq = Number(f?.find((b: any) => b.currency === 'mxn')?.available ?? 0);
+          if (fq > 0.01) await client.transfer('FUNDING_MAIN', 'MXN', Number(fq.toFixed(2)));
+        } catch {}
+        return { ok: true, amountMxn, withdrawal: w };
+      } catch (e: any) {
+        // Limpiar: regresar 50 MXN Funding -> Spot
+        try { await client.transfer('FUNDING_MAIN', 'MXN', amountMxn); } catch {}
+        return reply.code(400).send({ error: String(e?.message ?? e).slice(0, 250) });
+      }
 
   // Diagnóstico: prueba varias formas de aceptar la conversión USDT → MXN.
   app.post('/convert-accept-test', { preHandler: [authenticate] }, async (req) => {
