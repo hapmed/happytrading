@@ -1202,6 +1202,53 @@ export async function userRoutes(app: FastifyInstance) {
     return { tried: amt, out };
   });
 
+  // Diagnóstico: prueba el retiro SPEI con varias variantes (para encontrar el que funciona).
+  app.post('/payout-debug', { preHandler: [authenticate] }, async (req) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(user!);
+    const clabe = (user!.payoutClabe ?? '').replace(/\D/g, '');
+    const results: any[] = [];
+    const tryCall = async (name: string, fn: () => Promise<any>) => {
+      try {
+        results.push({ name, ok: true, result: await fn() });
+      } catch (e: any) {
+        results.push({ name, ok: false, error: String(e?.message ?? e).slice(0, 250) });
+      }
+    };
+
+    // 1) Métodos de pago disponibles para MXN (retiro)
+    await tryCall('payment-methods', async () => {
+      return await client.raw('GET', '/sapi/v1/fiatpayment/query/payment-methods', { currency: 'MXN', transactionType: 1 }, true);
+    });
+
+    // 2) Retirar sin bank
+    await tryCall('withdraw-no-bank', async () => {
+      return await client.fiatWithdrawMxn({ amountMxn: 50, clabe, beneficiary: user!.payoutBeneficiary });
+    });
+
+    // 3) Retirar con bank
+    await tryCall('withdraw-with-bank', async () => {
+      return await client.fiatWithdrawMxn({ amountMxn: 50, clabe, beneficiary: user!.payoutBeneficiary, bank: user!.payoutBank });
+    });
+
+    // 4) Transferir 50 MXN Spot -> Funding, luego retirar
+    await tryCall('transfer-spot-to-funding', async () => {
+      await client.transfer('MAIN_FUNDING', 'MXN', 50);
+      return 'ok';
+    });
+    await new Promise((r) => setTimeout(r, 2000));
+    await tryCall('withdraw-after-transfer', async () => {
+      return await client.fiatWithdrawMxn({ amountMxn: 50, clabe, beneficiary: user!.payoutBeneficiary });
+    });
+    // 5) Limpiar: regresar 50 MXN Funding -> Spot
+    await tryCall('transfer-back', async () => {
+      await client.transfer('FUNDING_MAIN', 'MXN', 50);
+      return 'ok';
+    });
+
+    return { results };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
