@@ -1095,6 +1095,25 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // Historial de transferencias internas (Spot ↔ Funding ↔ Futuros).
+  app.get('/transfers', { preHandler: [authenticate] }, async (req) => {
+    const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    const client: any = await makeExchangeClient(me!);
+    const now = Date.now();
+    const start = now - 30 * 86400000; // últimos 30 días
+    const out: any[] = [];
+    for (const t of ['MAIN_FUNDING', 'FUNDING_MAIN', 'MAIN_UMFUTURE', 'UMFUTURE_MAIN']) {
+      try {
+        const r = await client.raw('GET', '/sapi/v1/asset/transfer', { type: t, startTime: start, endTime: now, size: 20 }, true);
+        for (const row of (r?.rows ?? [])) out.push({ type: t, asset: row.asset, amount: row.amount, status: row.status, t: row.timestamp });
+      } catch (e: any) {
+        // ignorar los que no existan
+      }
+    }
+    out.sort((a, b) => (b.t ?? 0) - (a.t ?? 0));
+    return { rows: out.slice(0, 40) };
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
