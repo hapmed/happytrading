@@ -1151,25 +1151,34 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
-  // Diagnóstico: prueba la conversión USDT → MXN.
-  app.post('/convert-test', { preHandler: [authenticate] }, async (req) => {
+  // Diagnóstico: prueba varias formas de aceptar la conversión USDT → MXN.
+  app.post('/convert-accept-test', { preHandler: [authenticate] }, async (req) => {
     const me = await prisma.user.findUnique({ where: { id: req.user.sub } });
     const client: any = await makeExchangeClient(me!);
     const body = (req.body ?? {}) as { amount?: number };
     const amt = Number(body.amount ?? 3);
-    const variants: Array<{ params: any; result?: any; error?: string }> = [
-      { params: { fromAsset: 'USDT', toAsset: 'MXN', fromAmount: String(amt) } },
-      { params: { fromAsset: 'USDT', toAsset: 'MXN', fromAmount: String(amt), walletType: 'SPOT' } },
-      { params: { fromAsset: 'USDT', toAsset: 'MXN', fromAmount: String(amt), accountType: 'SPOT' } },
-    ];
-    for (const v of variants) {
+    const out: any[] = [];
+    let q: any = null;
+    try {
+      q = await client.raw('POST', '/sapi/v1/convert/getQuote', { fromAsset: 'USDT', toAsset: 'MXN', fromAmount: String(amt) }, true);
+    } catch (e: any) {
+      return { tried: amt, getQuoteError: String(e?.message ?? e).slice(0, 200) };
+    }
+    out.push({ step: 'getQuote', response: q });
+    const cands = [q.quoteId, q.validTimestamp, String(q.validTimestamp), q.orderId].filter(Boolean);
+    const seen = new Set();
+    for (const c of cands) {
+      if (seen.has(c)) continue;
+      seen.add(c);
       try {
-        v.result = await client.raw('POST', '/sapi/v1/convert/getQuote', v.params, true);
+        const a = await client.raw('POST', '/sapi/v1/convert/acceptQuote', { quoteId: c }, true);
+        out.push({ step: 'acceptQuote', quoteId: c, response: a });
+        break;
       } catch (e: any) {
-        v.error = String(e?.message ?? e).slice(0, 250);
+        out.push({ step: 'acceptQuote', quoteId: c, error: String(e?.message ?? e).slice(0, 200) });
       }
     }
-    return { tried: amt, variants };
+    return { tried: amt, out };
   });
 
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
