@@ -544,6 +544,7 @@ export async function runExecutorAll(): Promise<void> {
       await applyPosition(user.id, pos.symbol, 'SELL', qty, price);
       // 🏺 Si la venta fue GANADORA, su ganancia se va derechito a la bóveda.
       const gainP = (price - avg) * qty;
+      await logEvent(user.id, `SELL ${pos.symbol} · ${reason} · ganancia=${gainP.toFixed(6)} ${gainP > 0 ? '(→bóveda)' : '(sin ganancia)'}`, 'info');
       if (gainP > 0) {
         await saveProfitToVault(user.id, client, user, pos.symbol, gainP, (mxnMap.get(user.id) ?? 0) + price * qty);
       }
