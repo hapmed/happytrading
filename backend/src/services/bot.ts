@@ -484,6 +484,28 @@ async function planForUser(userId: string): Promise<void> {
 
   const cashReserveAmount = equityQuote * (cashReservePct / 100);
 
+  // ── Auto-restauración: si Binance vació la bóveda (auto-sweep), la reponemos ──
+  try {
+    const funding = await (client as any).fundingBalance?.();
+    const fq = Number(funding?.find((b: any) => b.currency === quote)?.available ?? 0);
+    const expectedRaw = await kv.get(`vault:expected:${userId}`);
+    let expected = Number(expectedRaw ?? 0);
+    // Primera vez: establecer la base con lo que ya hay guardado (no inventar ganancias).
+    if (!expectedRaw && fq > 0) {
+      expected = fq;
+      await kv.set(`vault:expected:${userId}`, String(fq));
+    }
+    if (expected > 0 && fq < expected - 0.01) {
+      const missing = expected - fq;
+      const canMove = Math.min(missing, cashAvailable);
+      if (canMove >= 0.01) {
+        await (client as any).transfer('MAIN_FUNDING', quote.toUpperCase(), Number(canMove.toFixed(6)));
+        await logEvent(userId, `🛡️ Binance vació la bóveda (auto-sweep): la repongo con ${canMove.toFixed(4)} ${quote.toUpperCase()} — ya bajo control del bot`, 'warn');
+      } else {
+        await logEvent(userId, `🛡️ Binance vació la bóveda pero no hay efectivo para reponerla (faltan ${missing.toFixed(4)})`, 'warn');
+      }
+    }
+  } catch {}
   // ── BÓVEDA: guarda TODA la ganancia REALIZADA en Funding (USDT estable, no varía) ──
   // Se mueve cualquier excedente por encima del capital. Una vez ahí NO se toca.
   try {

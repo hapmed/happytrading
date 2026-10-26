@@ -93,6 +93,11 @@ async function saveProfitToVault(
   }
   try {
     await (client as any).transfer('MAIN_FUNDING', q, amt);
+    // Track the expected vault level so we can restore it if Binance auto-sweeps it.
+    try {
+      const prev = Number((await kv.get(`vault:expected:${userId}`)) ?? 0);
+      await kv.set(`vault:expected:${userId}`, String(prev + amt));
+    } catch {}
     await logEvent(userId, `🏺 Ganancia ${symbol}: guardé ${amt.toFixed(2)} ${q} en la bóveda — ya no se mueve (de ahí sale tu retiro a la CLABE)`, 'ok');
     return amt;
   } catch (err) {

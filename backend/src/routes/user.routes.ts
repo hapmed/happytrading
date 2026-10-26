@@ -1114,6 +1114,43 @@ export async function userRoutes(app: FastifyInstance) {
     return { rows: out.slice(0, 40) };
   });
 
+  // Retiro manual a la CLABE (SPEI): convierte USDT→MXN y retira por SPEI.
+  app.post('/payout/manual', { preHandler: [authenticate] }, async (req, reply) => {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (!user) return reply.code(400).send({ error: 'Sesión inválida' });
+    const clabe = (user.payoutClabe ?? '').replace(/\D/g, '');
+    if (clabe.length !== 18) return reply.code(400).send({ error: 'CLABE de 18 dígitos requerida' });
+    if (!user.payoutBeneficiary) return reply.code(400).send({ error: 'Falta el nombre del beneficiario' });
+    const body = (req.body ?? {}) as { amount?: number };
+    const amountMxn = Math.round(Number(body.amount ?? 50) * 100) / 100;
+    if (!(amountMxn >= 50)) return reply.code(400).send({ error: 'Mínimo 50 MXN' });
+    try {
+      const client: any = await makeExchangeClient(user);
+      if (!client) return reply.code(400).send({ error: 'Binance no configurado' });
+      const quote = (user.quote ?? 'mxn').toLowerCase() === 'usdt' ? 'usdt' : 'mxn';
+      // 1) Convertir USDT → MXN (si no es MXN)
+      if (quote !== 'mxn') {
+        const needUsdt = Number((amountMxn / 18.4).toFixed(2));
+        await client.convert(quote.toUpperCase(), 'MXN', needUsdt);
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      // 2) Retirar MXN por SPEI a la CLABE
+      const w = await client.fiatWithdrawMxn({
+        amountMxn,
+        clabe,
+        beneficiary: user.payoutBeneficiary,
+        bank: user.payoutBank ?? undefined,
+      });
+      await prisma.deposit.create({
+        data: { userId: user.id, currency: 'mxn', amount: String(amountMxn), kind: 'WITHDRAWAL', note: `binance-spei-manual:${w?.orderId ?? w?.id ?? 'retiro'}` },
+      });
+      await logEvent(user.id, `🏦 Retiro manual a tu CLABE: $${amountMxn.toFixed(2)} MXN`, 'ok');
+      return { ok: true, amountMxn, withdrawal: w };
+    } catch (err: any) {
+      return reply.code(400).send({ error: String(err?.message ?? err).slice(0, 250) });
+    }
+  });
+
   // Portafolio EN VIVO: inversión inicial vs valor actual (precios al momento)
   app.get('/portfolio', { preHandler: [authenticate] }, async (req) => {
     const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
