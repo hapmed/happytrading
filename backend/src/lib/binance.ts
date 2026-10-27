@@ -338,24 +338,17 @@ export class BinanceClient {
       beneficiaryName: params.beneficiary,
       ...(params.bank ? { bankName: params.bank } : {}),
     });
-    // El retiro fiat (SPEI) de Binance requiere los parámetros en el BODY (form-encoded).
-    // La firma se calcula sobre los mismos parámetros (incl. timestamp) y va en la query string.
-    const bodyParams: Record<string, any> = {
+    // El retiro fiat (SPEI) de Binance: timestamp + firma en la query string,
+    // parámetros de negocio en el body (form-encoded).
+    const ts = Date.now();
+    const sigPayload = `timestamp=${ts}&recvWindow=5000`;
+    const signature = this.sign(sigPayload);
+    const url = `https://api.binance.com/sapi/v2/fiat/withdraw?timestamp=${ts}&recvWindow=5000&signature=${signature}`;
+    const body = new URLSearchParams({
       currency: 'MXN',
       apiPaymentMethod: 'WITHDRAW_MEDA',
       amount: params.amountMxn.toFixed(2),
       accountInfo,
-      timestamp: Date.now(),
-      recvWindow: 5000,
-    };
-    const qs = new URLSearchParams(bodyParams).toString();
-    const signature = this.sign(qs);
-    const url = `https://api.binance.com/sapi/v2/fiat/withdraw?signature=${signature}`;
-    const body = new URLSearchParams({
-      currency: bodyParams.currency,
-      apiPaymentMethod: bodyParams.apiPaymentMethod,
-      amount: bodyParams.amount,
-      accountInfo: bodyParams.accountInfo,
     }).toString();
     const res = await fetch(url, {
       method: 'POST',
